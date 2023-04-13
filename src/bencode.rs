@@ -147,10 +147,7 @@ pub fn parse(input: &str) -> Result<Value, ()> {
     let result = all_consuming(terminated(parse_value, opt(tag("\n"))))(input);
     match result {
         Ok((_, v)) => Ok(v),
-        e => {
-            dbg!(e);
-            Err(())
-        }
+        _ => Err(()),
     }
 }
 
