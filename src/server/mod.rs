@@ -2,13 +2,7 @@ use axum::extract::Query;
 use axum::routing::get;
 use axum::Router;
 
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Event {
-    Started,
-    Completed,
-    Stopped,
-}
+use crate::types::Event;
 
 #[derive(Debug, serde::Deserialize)]
 struct AnnounceRequest {

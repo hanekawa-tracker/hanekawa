@@ -11,7 +11,9 @@ use nom::{
     IResult,
 };
 
-use super::extension_bits::{Extension, parse_extensions};
+use crate::types::Event;
+
+use super::extension_bits::{parse_extensions, Extension};
 
 const PROTOCOL_ID: u64 = 0x41727101980;
 
@@ -47,13 +49,6 @@ fn encode_connect_response(resp: &ConnectResponse, buf: &mut BytesMut) {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum Event {
-    Completed,
-    Started,
-    Stopped,
-}
-
-#[derive(Debug, Eq, PartialEq)]
 pub struct AnnounceRequest {
     connection_id: i64,
     transaction_id: i32,
@@ -67,7 +62,7 @@ pub struct AnnounceRequest {
     key: i32,
     num_want: Option<i32>,
     port: i16,
-    extensions: Vec<Extension>
+    extensions: Vec<Extension>,
 }
 
 fn parse_20_bit_string(input: &[u8]) -> IResult<&[u8], String> {
@@ -117,7 +112,7 @@ fn parse_announce_request(input: &[u8]) -> IResult<&[u8], AnnounceRequest> {
             key,
             num_want,
             port,
-            extensions
+            extensions,
         ),
     ) = tuple((
         be_i64,
@@ -133,7 +128,7 @@ fn parse_announce_request(input: &[u8]) -> IResult<&[u8], AnnounceRequest> {
         be_i32,
         parse_num_want,
         be_i16,
-        parse_extensions
+        parse_extensions,
     ))(input)?;
 
     Ok((
@@ -151,7 +146,7 @@ fn parse_announce_request(input: &[u8]) -> IResult<&[u8], AnnounceRequest> {
             key,
             num_want,
             port,
-            extensions
+            extensions,
         },
     ))
 }
