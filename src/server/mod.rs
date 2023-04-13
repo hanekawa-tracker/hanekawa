@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 
 use axum::extract::Query;
 use axum::routing::get;
@@ -22,7 +22,7 @@ struct AnnounceRequest {
 
 struct Peer {
     peer_id: String,
-    ip: Ipv4Addr,
+    ip: IpAddr,
     port: u16,
 }
 
@@ -35,16 +35,28 @@ async fn announce(Query(announce): Query<AnnounceRequest>) -> String {
         use std::collections::BTreeMap;
 
         let mut peer_string = BytesMut::new();
+        let mut peer6_string = BytesMut::new();
         for peer in peers.into_iter() {
-            let ip_bytes: u32 = peer.ip.into();
-            peer_string.put_u32(ip_bytes);
-            peer_string.put_u16(peer.port)
+            match peer.ip {
+                IpAddr::V4(ip) => {
+                    let ip_bytes: u32 = ip.into();
+                    peer_string.put_u32(ip_bytes);
+                    peer_string.put_u16(peer.port);
+                }
+                IpAddr::V6(ip) => {
+                    let ip_bytes: u128 = ip.into();
+                    peer6_string.put_u128(ip_bytes);
+                    peer6_string.put_u16(peer.port);
+                }
+            }
         }
         let peers = std::str::from_utf8(&peer_string).unwrap().to_string();
+        let peers6 = std::str::from_utf8(&peer6_string).unwrap().to_string();
 
         let mut data = BTreeMap::new();
         data.insert("interval".to_string(), Value::Int(30));
         data.insert("peers".to_string(), Value::String(peers));
+        data.insert("peers6".to_string(), Value::String(peers6));
 
         encode(&Value::Dict(data))
     } else {
