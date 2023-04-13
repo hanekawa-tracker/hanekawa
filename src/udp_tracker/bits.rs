@@ -1,3 +1,5 @@
+// BEP 15: UDP Tracker Protocol for BitTorrent
+
 use bytes::{BufMut, BytesMut};
 use nom::{
     branch::alt,
@@ -8,6 +10,8 @@ use nom::{
     sequence::tuple,
     IResult,
 };
+
+use super::extension_bits::{Extension, parse_extensions};
 
 const PROTOCOL_ID: u64 = 0x41727101980;
 
@@ -63,6 +67,7 @@ pub struct AnnounceRequest {
     key: i32,
     num_want: Option<i32>,
     port: i16,
+    extensions: Vec<Extension>
 }
 
 fn parse_20_bit_string(input: &[u8]) -> IResult<&[u8], String> {
@@ -112,6 +117,7 @@ fn parse_announce_request(input: &[u8]) -> IResult<&[u8], AnnounceRequest> {
             key,
             num_want,
             port,
+            extensions
         ),
     ) = tuple((
         be_i64,
@@ -127,6 +133,7 @@ fn parse_announce_request(input: &[u8]) -> IResult<&[u8], AnnounceRequest> {
         be_i32,
         parse_num_want,
         be_i16,
+        parse_extensions
     ))(input)?;
 
     Ok((
@@ -144,6 +151,7 @@ fn parse_announce_request(input: &[u8]) -> IResult<&[u8], AnnounceRequest> {
             key,
             num_want,
             port,
+            extensions
         },
     ))
 }
@@ -331,7 +339,8 @@ mod test {
                     ip_address: None,
                     key: 17,
                     num_want: None,
-                    port: 3001
+                    port: 3001,
+                    extensions: Vec::new()
                 }
             )),
             parse_announce_request(&buf)

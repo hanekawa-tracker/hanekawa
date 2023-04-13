@@ -1,6 +1,7 @@
-// BEP 15: UDP Tracker Protocol for BitTorrent
+// BEP 15 and BEP 41
 
 mod bits;
+mod extension_bits;
 
 use tokio_util::codec::{Decoder, Encoder};
 
