@@ -3,6 +3,7 @@ use std::net::Ipv4Addr;
 use axum::extract::Query;
 use axum::routing::get;
 use axum::Router;
+use axum_extra::extract::Query as MultiQuery;
 
 use crate::bencode::{encode, Value};
 use crate::types::Event;
@@ -70,8 +71,45 @@ async fn announce(Query(announce): Query<AnnounceRequest>) -> String {
     }
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct ScrapeRequest {
+    info_hash: Vec<String>,
+}
+
+#[derive(Debug)]
+struct InfoHashData {
+    peer_id: String,
+    complete: u32,
+    downloaded: u32,
+    incomplete: u32,
+}
+
+// BEP 48: Tracker Protocol Extension: Scrape
+async fn scrape(MultiQuery(_scrape): MultiQuery<ScrapeRequest>) -> String {
+    use std::collections::BTreeMap;
+
+    let datas: Vec<InfoHashData> = vec![];
+
+    let mut files = BTreeMap::new();
+    for data in datas.into_iter() {
+        let mut data_dict = BTreeMap::new();
+        data_dict.insert("complete".to_string(), Value::Int(data.complete as i32));
+        data_dict.insert("downloaded".to_string(), Value::Int(data.downloaded as i32));
+        data_dict.insert("incomplete".to_string(), Value::Int(data.incomplete as i32));
+
+        files.insert(data.peer_id, Value::Dict(data_dict));
+    }
+
+    let mut response = BTreeMap::new();
+    response.insert("files".to_string(), Value::Dict(files));
+
+    encode(&Value::Dict(response))
+}
+
 pub async fn start() {
-    let app = Router::new().route("/announce", get(announce));
+    let app = Router::new()
+        .route("/announce", get(announce))
+        .route("/scrape", get(scrape));
 
     axum::Server::bind(&([127, 0, 0, 1], 8001).into())
         .serve(app.into_make_service())

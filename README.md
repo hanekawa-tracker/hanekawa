@@ -15,6 +15,7 @@ hanekawa doesn't know everything, she just knows what she knows.
 - [x] [BEP 15: UDP Tracker Protocol](https://www.bittorrent.org/beps/bep_0015.html)
 - [x] [BEP 23: Tracker Returns Compact Peer Lists](https://www.bittorrent.org/beps/bep_0023.html)
 - [x] [BEP 41: UDP Tracker Protocol Extensions](https://www.bittorrent.org/beps/bep_0041.html)
+- [x] [BEP 48: Tracker Protocol Extension: Scrape](https://www.bittorrent.org/beps/bep_0048.html)
 
 ## License
 
