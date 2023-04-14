@@ -1,4 +1,10 @@
+mod ser;
+
+pub use ser::to_string;
+
 use std::collections::BTreeMap;
+
+use bytes::{BufMut, BytesMut};
 
 use nom::{
     branch::alt,
@@ -43,10 +49,10 @@ fn parse_string(input: &str) -> IResult<&str, String> {
     Err(nom::Err::Failure(Error::new(input, ErrorKind::Eof)))
 }
 
-fn encode_string(buf: &mut String, s: &str) {
-    buf.push_str(&s.len().to_string());
-    buf.push(':');
-    buf.push_str(s);
+fn encode_string(s: &str, buf: &mut BytesMut) {
+    buf.put_slice(&s.len().to_string().as_bytes());
+    buf.put_slice(":".as_bytes());
+    buf.put_slice(s.as_bytes());
 }
 
 fn parse_string_value(input: &str) -> IResult<&str, Value> {
@@ -83,8 +89,8 @@ fn parse_integer(input: &str) -> IResult<&str, Value> {
     Ok(result)
 }
 
-fn encode_integer(buf: &mut String, i: i64) {
-    buf.push_str(&format!("i{}e", i));
+fn encode_integer(i: i64, buf: &mut BytesMut) {
+    buf.put_slice(format!("i{}e", i).as_bytes());
 }
 
 // parses l<value*>e
@@ -96,12 +102,12 @@ fn parse_list(input: &str) -> IResult<&str, Value> {
     )(input)
 }
 
-fn encode_list(buf: &mut String, vs: &Vec<Value>) {
-    buf.push('l');
+fn encode_list(vs: &Vec<Value>, buf: &mut BytesMut) {
+    buf.put_slice("l".as_bytes());
     for v in vs {
-        encode_value(buf, v);
+        encode_value(v, buf);
     }
-    buf.push('e')
+    buf.put_slice("e".as_bytes())
 }
 
 // d<(<str><value>)*>e
@@ -115,32 +121,33 @@ fn parse_dict(input: &str) -> IResult<&str, Value> {
     )(input)
 }
 
-fn encode_dict(buf: &mut String, vs: &BTreeMap<String, Value>) {
-    buf.push('d');
+fn encode_dict(vs: &BTreeMap<String, Value>, buf: &mut BytesMut) {
+    buf.put_slice("d".as_bytes());
     for (k, v) in vs {
-        encode_string(buf, k);
-        encode_value(buf, v);
+        encode_string(k, buf);
+        encode_value(v, buf);
     }
-    buf.push('e')
+    buf.put_slice("e".as_bytes())
 }
 
 fn parse_value(input: &str) -> IResult<&str, Value> {
     alt((parse_string_value, parse_integer, parse_list, parse_dict))(input)
 }
 
-fn encode_value(buf: &mut String, value: &Value) {
+fn encode_value(value: &Value, buf: &mut BytesMut) {
     match value {
-        Value::String(s) => encode_string(buf, s),
-        Value::Int(i) => encode_integer(buf, *i),
-        Value::List(vs) => encode_list(buf, vs),
-        Value::Dict(vs) => encode_dict(buf, vs),
+        Value::String(s) => encode_string(s, buf),
+        Value::Int(i) => encode_integer(*i, buf),
+        Value::List(vs) => encode_list(vs, buf),
+        Value::Dict(vs) => encode_dict(vs, buf),
     }
 }
 
 pub fn encode(value: &Value) -> String {
-    let mut buf = String::new();
-    encode_value(&mut buf, value);
-    buf
+    let mut buf = BytesMut::new();
+    encode_value(value, &mut buf);
+
+    std::str::from_utf8(&buf).unwrap().to_string()
 }
 
 pub fn parse(input: &str) -> Result<Value, ()> {
