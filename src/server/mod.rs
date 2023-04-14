@@ -69,7 +69,7 @@ async fn announce(Query(announce): Query<AnnounceRequest>) -> String {
                 let mut data = BTreeMap::new();
                 data.insert("peer id".to_string(), Value::String(p.peer_id.clone()));
                 data.insert("ip".to_string(), Value::String(p.ip.to_string()));
-                data.insert("port".to_string(), Value::Int(p.port as i32));
+                data.insert("port".to_string(), Value::Int(p.port as i64));
 
                 Value::Dict(data)
             })
@@ -105,9 +105,9 @@ async fn scrape(MultiQuery(_scrape): MultiQuery<ScrapeRequest>) -> String {
     let mut files = BTreeMap::new();
     for data in datas.into_iter() {
         let mut data_dict = BTreeMap::new();
-        data_dict.insert("complete".to_string(), Value::Int(data.complete as i32));
-        data_dict.insert("downloaded".to_string(), Value::Int(data.downloaded as i32));
-        data_dict.insert("incomplete".to_string(), Value::Int(data.incomplete as i32));
+        data_dict.insert("complete".to_string(), Value::Int(data.complete as i64));
+        data_dict.insert("downloaded".to_string(), Value::Int(data.downloaded as i64));
+        data_dict.insert("incomplete".to_string(), Value::Int(data.incomplete as i64));
 
         files.insert(data.peer_id, Value::Dict(data_dict));
     }

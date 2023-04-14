@@ -13,7 +13,7 @@ use nom::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     String(String),
-    Int(i32),
+    Int(i64),
     List(Vec<Value>),
     Dict(BTreeMap<String, Value>),
 }
@@ -53,7 +53,7 @@ fn parse_string_value(input: &str) -> IResult<&str, Value> {
     map(parse_string, |s| Value::String(s))(input)
 }
 
-fn parse_integer_numeric_part(input: &str) -> IResult<&str, i32> {
+fn parse_integer_numeric_part(input: &str) -> IResult<&str, i64> {
     fn is_nonzero_numeric(c: char) -> bool {
         is_numeric(c) && c != '0'
     }
@@ -67,7 +67,7 @@ fn parse_integer_numeric_part(input: &str) -> IResult<&str, i32> {
         ))),
     ))(input)?;
 
-    let matched: i32 = matched.parse().unwrap();
+    let matched: i64 = matched.parse().unwrap();
 
     Ok((input, matched))
 }
@@ -83,7 +83,7 @@ fn parse_integer(input: &str) -> IResult<&str, Value> {
     Ok(result)
 }
 
-fn encode_integer(buf: &mut String, i: i32) {
+fn encode_integer(buf: &mut String, i: i64) {
     buf.push_str(&format!("i{}e", i));
 }
 
