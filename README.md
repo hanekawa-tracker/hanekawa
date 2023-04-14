@@ -7,6 +7,7 @@ hanekawa doesn't know everything, she just knows what she knows.
 ## Features
 
 - High performance, comprehensively tested, and round-trip fuzzed `bencode` parser and encoder
+- Serde serializer for `bencode` structures
 - Implements several tracker-related [BEPs](https://www.bittorrent.org/beps/bep_0000.html)
 - Supports both HTTP and UDP tracking
 
