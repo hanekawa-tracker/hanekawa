@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::IpAddr;
 
 use axum::extract::Query;
@@ -5,7 +6,7 @@ use axum::routing::get;
 use axum::Router;
 use axum_extra::extract::Query as MultiQuery;
 
-use crate::bencode::{encode, Value};
+use crate::bencode::{self, encode, Value};
 use crate::types::Event;
 
 #[derive(Debug, serde::Deserialize)]
@@ -96,26 +97,40 @@ struct InfoHashData {
     incomplete: u32,
 }
 
+#[derive(Debug, serde::Serialize)]
+struct PeerScrapeData {
+    complete: u32,
+    downloaded: u32,
+    incomplete: u32,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ScrapeResponse {
+    files: HashMap<String, PeerScrapeData>
+}
+
 // BEP 48: Tracker Protocol Extension: Scrape
 async fn scrape(MultiQuery(_scrape): MultiQuery<ScrapeRequest>) -> String {
-    use std::collections::BTreeMap;
+    let datas: Vec<InfoHashData> = vec![InfoHashData {
+        peer_id: "testerllalal".to_string(),
+        complete: 32,
+        downloaded: 42,
+        incomplete: 17
+    }];
 
-    let datas: Vec<InfoHashData> = vec![];
+    let mut files = HashMap::new();
 
-    let mut files = BTreeMap::new();
     for data in datas.into_iter() {
-        let mut data_dict = BTreeMap::new();
-        data_dict.insert("complete".to_string(), Value::Int(data.complete as i64));
-        data_dict.insert("downloaded".to_string(), Value::Int(data.downloaded as i64));
-        data_dict.insert("incomplete".to_string(), Value::Int(data.incomplete as i64));
-
-        files.insert(data.peer_id, Value::Dict(data_dict));
+        files.insert(data.peer_id, PeerScrapeData {
+            complete: data.complete,
+            downloaded: data.downloaded,
+            incomplete: data.incomplete
+        });
     }
 
-    let mut response = BTreeMap::new();
-    response.insert("files".to_string(), Value::Dict(files));
-
-    encode(&Value::Dict(response))
+    bencode::to_string(&ScrapeResponse {
+        files
+    }).unwrap()
 }
 
 pub async fn start() {
