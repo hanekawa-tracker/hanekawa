@@ -1,6 +1,6 @@
 mod ser;
 
-pub use ser::to_string;
+pub use ser::to_bytes;
 
 use std::collections::BTreeMap;
 
@@ -16,26 +16,43 @@ use nom::{
 };
 
 #[cfg_attr(feature = "fuzz", derive(arbitrary::Arbitrary))]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub enum Value {
+    Bytes(Vec<u8>),
     String(String),
     Int(i64),
     List(Vec<Value>),
     Dict(BTreeMap<String, Value>),
 }
 
-fn is_numeric(c: char) -> bool {
-    c.is_digit(10)
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Bytes(b), Self::Bytes(b2)) if b == b2 => true,
+            (Self::Bytes(b), Self::String(s)) if b == s.as_bytes() => true,
+            (Self::String(s), Self::Bytes(b)) if b == s.as_bytes() => true,
+            (Self::String(s), Self::String(s2)) if s == s2 => true,
+            (Self::Int(i), Self::Int(i2)) if i == i2 => true,
+            (Self::List(l), Self::List(l2)) if l == l2 => true,
+            (Self::Dict(d), Self::Dict(d2)) if d == d2 => true,
+            _ => false,
+        }
+    }
 }
 
-fn parse_numeric(input: &str) -> IResult<&str, u32> {
+fn is_numeric(c: u8) -> bool {
+    c >= b'0' && c <= b'9'
+}
+
+fn parse_numeric(input: &[u8]) -> IResult<&[u8], u32> {
     let (input, len) = take_while1(is_numeric)(input)?;
+    let len = std::str::from_utf8(len).unwrap();
     let len: u32 = len.parse().unwrap();
     Ok((input, len))
 }
 
 // parses <len>:<str>
-fn parse_string(input: &str) -> IResult<&str, String> {
+fn parse_string_or_bytes_value(input: &[u8]) -> IResult<&[u8], Value> {
     use nom::error::{Error, ErrorKind};
 
     let (input, len) = parse_numeric(input)?;
@@ -43,25 +60,35 @@ fn parse_string(input: &str) -> IResult<&str, String> {
 
     if input.len() >= len as usize {
         let (s, rest) = input.split_at(len as usize);
-        return Ok((rest, s.to_string()));
+        return match std::str::from_utf8(s) {
+            Ok(s) => Ok((rest, Value::String(s.to_string()))),
+            _ => Ok((rest, Value::Bytes(s.to_vec()))),
+        };
     }
 
     Err(nom::Err::Failure(Error::new(input, ErrorKind::Eof)))
 }
 
-fn encode_string(s: &str, buf: &mut BytesMut) {
-    buf.put_slice(&s.len().to_string().as_bytes());
+fn parse_string(input: &[u8]) -> IResult<&[u8], String> {
+    use nom::error::{Error, ErrorKind};
+
+    let (input, val) = parse_string_or_bytes_value(input)?;
+
+    match val {
+        Value::String(s) => Ok((input, s)),
+        _ => Err(nom::Err::Failure(Error::new(input, ErrorKind::Verify))),
+    }
+}
+
+fn encode_string(bytes: &[u8], buf: &mut BytesMut) {
+    buf.put_slice(bytes.len().to_string().as_bytes());
     buf.put_slice(":".as_bytes());
-    buf.put_slice(s.as_bytes());
+    buf.put_slice(bytes);
 }
 
-fn parse_string_value(input: &str) -> IResult<&str, Value> {
-    map(parse_string, |s| Value::String(s))(input)
-}
-
-fn parse_integer_numeric_part(input: &str) -> IResult<&str, i64> {
-    fn is_nonzero_numeric(c: char) -> bool {
-        is_numeric(c) && c != '0'
+fn parse_integer_numeric_part(input: &[u8]) -> IResult<&[u8], i64> {
+    fn is_nonzero_numeric(c: u8) -> bool {
+        is_numeric(c) && c != b'0'
     }
 
     let (input, matched) = alt((
@@ -73,13 +100,14 @@ fn parse_integer_numeric_part(input: &str) -> IResult<&str, i64> {
         ))),
     ))(input)?;
 
+    let matched = std::str::from_utf8(matched).unwrap();
     let matched: i64 = matched.parse().unwrap();
 
     Ok((input, matched))
 }
 
 // parses i<num>e
-fn parse_integer(input: &str) -> IResult<&str, Value> {
+fn parse_integer(input: &[u8]) -> IResult<&[u8], Value> {
     let result = delimited(
         tag("i"),
         map(parse_integer_numeric_part, |i| Value::Int(i)),
@@ -90,11 +118,14 @@ fn parse_integer(input: &str) -> IResult<&str, Value> {
 }
 
 fn encode_integer(i: i64, buf: &mut BytesMut) {
-    buf.put_slice(format!("i{}e", i).as_bytes());
+    buf.put_slice("i".as_bytes());
+    let mut ws = itoa::Buffer::new();
+    buf.put_slice(ws.format(i).as_bytes());
+    buf.put_slice("e".as_bytes());
 }
 
 // parses l<value*>e
-fn parse_list(input: &str) -> IResult<&str, Value> {
+fn parse_list(input: &[u8]) -> IResult<&[u8], Value> {
     delimited(
         tag("l"),
         map(many0(parse_value), |vs| Value::List(vs)),
@@ -111,7 +142,7 @@ fn encode_list(vs: &Vec<Value>, buf: &mut BytesMut) {
 }
 
 // d<(<str><value>)*>e
-fn parse_dict(input: &str) -> IResult<&str, Value> {
+fn parse_dict(input: &[u8]) -> IResult<&[u8], Value> {
     delimited(
         tag("d"),
         map(many0(tuple((parse_string, parse_value))), |ps| {
@@ -124,33 +155,39 @@ fn parse_dict(input: &str) -> IResult<&str, Value> {
 fn encode_dict(vs: &BTreeMap<String, Value>, buf: &mut BytesMut) {
     buf.put_slice("d".as_bytes());
     for (k, v) in vs {
-        encode_string(k, buf);
+        encode_string(k.as_bytes(), buf);
         encode_value(v, buf);
     }
     buf.put_slice("e".as_bytes())
 }
 
-fn parse_value(input: &str) -> IResult<&str, Value> {
-    alt((parse_string_value, parse_integer, parse_list, parse_dict))(input)
+fn parse_value(input: &[u8]) -> IResult<&[u8], Value> {
+    alt((
+        parse_string_or_bytes_value,
+        parse_integer,
+        parse_list,
+        parse_dict,
+    ))(input)
 }
 
 fn encode_value(value: &Value, buf: &mut BytesMut) {
     match value {
-        Value::String(s) => encode_string(s, buf),
+        Value::Bytes(b) => encode_string(&b, buf),
+        Value::String(s) => encode_string(s.as_bytes(), buf),
         Value::Int(i) => encode_integer(*i, buf),
         Value::List(vs) => encode_list(vs, buf),
         Value::Dict(vs) => encode_dict(vs, buf),
     }
 }
 
-pub fn encode(value: &Value) -> String {
+pub fn encode(value: &Value) -> Vec<u8> {
     let mut buf = BytesMut::new();
     encode_value(value, &mut buf);
 
-    std::str::from_utf8(&buf).unwrap().to_string()
+    buf.to_vec()
 }
 
-pub fn parse(input: &str) -> Result<Value, ()> {
+pub fn parse(input: &[u8]) -> Result<Value, ()> {
     let result = all_consuming(terminated(parse_value, opt(tag("\n"))))(input);
     match result {
         Ok((_, v)) => Ok(v),
@@ -164,25 +201,31 @@ mod test {
 
     #[test]
     fn parses_string() {
-        let enc = "4:spam";
+        let enc = "4:spam".as_bytes();
         assert_eq!(Value::String("spam".to_string()), parse(&enc).unwrap())
     }
 
     #[test]
     fn parses_valid_ints() {
-        assert_eq!(Value::Int(3), parse("i3e").unwrap());
-        assert_eq!(Value::Int(0), parse("i0e").unwrap())
+        assert_eq!(Value::Int(3), parse("i3e".as_bytes()).unwrap());
+        assert_eq!(Value::Int(0), parse("i0e".as_bytes()).unwrap())
     }
 
     #[test]
     fn rejects_invalid_ints() {
-        assert!(parse("i03e").is_err(), "leading zeros are invalid");
-        assert!(parse("i-0e").is_err(), "negative zero is invalid");
+        assert!(
+            parse("i03e".as_bytes()).is_err(),
+            "leading zeros are invalid"
+        );
+        assert!(
+            parse("i-0e".as_bytes()).is_err(),
+            "negative zero is invalid"
+        );
     }
 
     #[test]
     fn parses_lists() {
-        let enc = "l4:spam4:eggse";
+        let enc = "l4:spam4:eggse".as_bytes();
         assert_eq!(
             Value::List(vec![
                 Value::String("spam".to_string()),
@@ -203,7 +246,7 @@ mod test {
                 .into_iter()
                 .collect()
             ),
-            parse("d3:cow3:moo4:spam4:eggse").unwrap()
+            parse("d3:cow3:moo4:spam4:eggse".as_bytes()).unwrap()
         );
 
         assert_eq!(
@@ -218,7 +261,7 @@ mod test {
                 .into_iter()
                 .collect()
             ),
-            parse("d4:spaml1:a1:bee").unwrap()
+            parse("d4:spaml1:a1:bee".as_bytes()).unwrap()
         );
     }
 }

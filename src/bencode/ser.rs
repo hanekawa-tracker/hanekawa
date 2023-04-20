@@ -1,6 +1,6 @@
 use super::{encode_dict, encode_integer, encode_list, encode_string, Value};
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use serde::ser::{self, Impossible};
 use std::collections::BTreeMap;
 
@@ -46,10 +46,8 @@ impl std::fmt::Display for Error {
                 } else {
                     f.write_str("unsupported element")
                 }
-            },
-            Self::InvalidMapKey => {
-                f.write_str("invalid map key: keys must be strings")
-            },
+            }
+            Self::InvalidMapKey => f.write_str("invalid map key: keys must be strings"),
             Self::Other(s) => f.write_fmt(format_args!("other error: {}", s)),
         }
     }
@@ -144,15 +142,20 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         if !self.ignoring_buffer {
-            encode_string(v, &mut self.buf);
+            encode_string(v.as_bytes(), &mut self.buf);
         }
         self.last_value = Some(Value::String(v.to_string()));
 
         Ok(())
     }
 
-    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        unsupported_element(Some("bytes"))
+    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+        if !self.ignoring_buffer {
+            encode_string(v, &mut self.buf);
+        }
+        self.last_value = Some(Value::Bytes(v.to_vec()));
+
+        Ok(())
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
@@ -354,7 +357,7 @@ impl<'a> MapSerializer<'a> {
         Self {
             entries: BTreeMap::new(),
             current_key: None,
-            serializer
+            serializer,
         }
     }
 }
@@ -366,32 +369,30 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
 
     fn serialize_key<T: ?Sized>(&mut self, key: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize {
-            self.serializer.without_buffering(|s| {
-                key.serialize(s)
-            })?;
-            if let Some(Value::String(s)) = self.serializer.last_value.take() {
-                self.current_key = Some(s);
-                Ok(())
-            } else {
-                Err(Error::InvalidMapKey)
-            }
+        T: serde::Serialize,
+    {
+        self.serializer.without_buffering(|s| key.serialize(s))?;
+        if let Some(Value::String(s)) = self.serializer.last_value.take() {
+            self.current_key = Some(s);
+            Ok(())
+        } else {
+            Err(Error::InvalidMapKey)
+        }
     }
 
     fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
-        T: serde::Serialize {
-            self.serializer.without_buffering(|s| {
-                value.serialize(s)
-            })?;
+        T: serde::Serialize,
+    {
+        self.serializer.without_buffering(|s| value.serialize(s))?;
 
-            if let Some(v) = self.serializer.last_value.take() {
-                if let Some(k) = self.current_key.take() {
-                    self.entries.insert(k, v);
-                }
+        if let Some(v) = self.serializer.last_value.take() {
+            if let Some(k) = self.current_key.take() {
+                self.entries.insert(k, v);
             }
+        }
 
-            Ok(())
+        Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
@@ -404,9 +405,9 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     }
 }
 
-pub fn to_string<T: serde::Serialize>(value: &T) -> Result<String, Error> {
+pub fn to_bytes<T: serde::Serialize>(value: &T) -> Result<Bytes, Error> {
     let mut serializer = Serializer::new();
     value.serialize(&mut serializer)?;
 
-    Ok(std::str::from_utf8(&serializer.buf).unwrap().to_string())
+    Ok(serializer.buf.into())
 }

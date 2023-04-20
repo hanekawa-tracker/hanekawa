@@ -6,8 +6,9 @@ use axum::routing::get;
 use axum::Router;
 use axum_extra::extract::Query as MultiQuery;
 
-use crate::bencode::{self, encode, Value};
+use crate::bencode;
 use crate::types::Event;
+use bytes::Bytes;
 
 #[derive(Debug, serde::Deserialize)]
 struct AnnounceRequest {
@@ -21,19 +22,38 @@ struct AnnounceRequest {
     compact: Option<u8>,
 }
 
+#[derive(serde::Serialize)]
 struct Peer {
+    #[serde(rename = "peer id")]
     peer_id: String,
     ip: IpAddr,
     port: u16,
 }
 
-async fn announce(Query(announce): Query<AnnounceRequest>) -> String {
-    let peers: Vec<Peer> = vec![];
+#[derive(serde::Serialize)]
+#[serde(untagged)]
+enum PeerData {
+    Compact(#[serde(with = "serde_bytes")] Vec<u8>),
+    Long(Vec<Peer>),
+}
 
-    if announce.compact.unwrap_or(1) == 1 {
+#[derive(serde::Serialize)]
+struct AnnounceResponse {
+    interval: u32,
+    peers: PeerData,
+    peers6: PeerData,
+}
+
+async fn announce(Query(announce): Query<AnnounceRequest>) -> Bytes {
+    let peers: Vec<Peer> = vec![Peer {
+        peer_id: "123".to_string(),
+        ip: IpAddr::V4(std::net::Ipv4Addr::new(132, 216, 25, 20)),
+        port: 8001,
+    }];
+
+    let (peers, peers6) = if announce.compact.unwrap_or(1) == 1 {
         // BEP 23 Compact representation
         use bytes::{BufMut, BytesMut};
-        use std::collections::BTreeMap;
 
         let mut peer_string = BytesMut::new();
         let mut peer6_string = BytesMut::new();
@@ -51,37 +71,24 @@ async fn announce(Query(announce): Query<AnnounceRequest>) -> String {
                 }
             }
         }
-        let peers = std::str::from_utf8(&peer_string).unwrap().to_string();
-        let peers6 = std::str::from_utf8(&peer6_string).unwrap().to_string();
 
-        let mut data = BTreeMap::new();
-        data.insert("interval".to_string(), Value::Int(30));
-        data.insert("peers".to_string(), Value::String(peers));
-        data.insert("peers6".to_string(), Value::String(peers6));
-
-        encode(&Value::Dict(data))
+        (
+            PeerData::Compact(peer_string.to_vec()),
+            PeerData::Compact(peer6_string.to_vec()),
+        )
     } else {
         // BEP 3 representation
-        use std::collections::BTreeMap;
+        let (peers, peers6) = peers.into_iter().partition::<Vec<_>, _>(|p| p.ip.is_ipv4());
 
-        let peer_dicts = peers
-            .into_iter()
-            .map(|p| {
-                let mut data = BTreeMap::new();
-                data.insert("peer id".to_string(), Value::String(p.peer_id.clone()));
-                data.insert("ip".to_string(), Value::String(p.ip.to_string()));
-                data.insert("port".to_string(), Value::Int(p.port as i64));
+        (PeerData::Long(peers), PeerData::Long(peers6))
+    };
 
-                Value::Dict(data)
-            })
-            .collect();
-
-        let mut data = BTreeMap::new();
-        data.insert("interval".to_string(), Value::Int(30));
-        data.insert("peers".to_string(), Value::List(peer_dicts));
-
-        encode(&Value::Dict(data))
-    }
+    bencode::to_bytes(&AnnounceResponse {
+        interval: 60,
+        peers,
+        peers6,
+    })
+    .unwrap()
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -106,31 +113,32 @@ struct PeerScrapeData {
 
 #[derive(Debug, serde::Serialize)]
 struct ScrapeResponse {
-    files: HashMap<String, PeerScrapeData>
+    files: HashMap<String, PeerScrapeData>,
 }
 
 // BEP 48: Tracker Protocol Extension: Scrape
-async fn scrape(MultiQuery(_scrape): MultiQuery<ScrapeRequest>) -> String {
+async fn scrape(MultiQuery(_scrape): MultiQuery<ScrapeRequest>) -> Bytes {
     let datas: Vec<InfoHashData> = vec![InfoHashData {
         peer_id: "testerllalal".to_string(),
         complete: 32,
         downloaded: 42,
-        incomplete: 17
+        incomplete: 17,
     }];
 
     let mut files = HashMap::new();
 
     for data in datas.into_iter() {
-        files.insert(data.peer_id, PeerScrapeData {
-            complete: data.complete,
-            downloaded: data.downloaded,
-            incomplete: data.incomplete
-        });
+        files.insert(
+            data.peer_id,
+            PeerScrapeData {
+                complete: data.complete,
+                downloaded: data.downloaded,
+                incomplete: data.incomplete,
+            },
+        );
     }
 
-    bencode::to_string(&ScrapeResponse {
-        files
-    }).unwrap()
+    bencode::to_bytes(&ScrapeResponse { files }).unwrap()
 }
 
 pub async fn start() {
