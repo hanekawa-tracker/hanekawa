@@ -1,4 +1,5 @@
 pub mod bencode;
+mod http_tracker;
 mod server;
 mod types;
 mod udp_tracker;
