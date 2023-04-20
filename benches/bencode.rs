@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use include_dir::{include_dir, Dir};
 
 use hanekawa::bencode;
@@ -7,12 +7,12 @@ const TORRENT_SAMPLES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/benches/sampl
 
 pub fn parse_torrents(c: &mut Criterion) {
     for sample in TORRENT_SAMPLES.files() {
-        let name = sample.path()
-            .file_name()
-            .unwrap()
-            .to_string_lossy();
+        let name = sample.path().file_name().unwrap().to_string_lossy();
 
-        c.bench_function(&format!("parse {}", name), |b| {
+        let mut group = c.benchmark_group(name.clone());
+        group.throughput(Throughput::BytesDecimal(sample.contents().len() as u64));
+
+        group.bench_function("parse", |b| {
             b.iter(|| {
                 bencode::parse(black_box(sample.contents())).unwrap();
             })
@@ -22,15 +22,14 @@ pub fn parse_torrents(c: &mut Criterion) {
 
 pub fn encode_torrents(c: &mut Criterion) {
     for sample in TORRENT_SAMPLES.files() {
-        let name = sample.path()
-            .file_name()
-            .unwrap()
-            .to_string_lossy();
+        let name = sample.path().file_name().unwrap().to_string_lossy();
 
-        let parsed = bencode::parse(sample.contents())
-            .unwrap();
+        let parsed = bencode::parse(sample.contents()).unwrap();
 
-        c.bench_function(&format!("encode {}", name), |b| {
+        let mut group = c.benchmark_group(name.clone());
+        group.throughput(Throughput::BytesDecimal(sample.contents().len() as u64));
+
+        group.bench_function("encode", |b| {
             b.iter(|| {
                 bencode::encode(&parsed);
             })
@@ -40,22 +39,25 @@ pub fn encode_torrents(c: &mut Criterion) {
 
 pub fn encode_torrents_serde(c: &mut Criterion) {
     for sample in TORRENT_SAMPLES.files() {
-        let name = sample.path()
-            .file_name()
-            .unwrap()
-            .to_string_lossy();
+        let name = sample.path().file_name().unwrap().to_string_lossy();
 
-        let parsed = bencode::parse(sample.contents())
-            .unwrap();
+        let mut group = c.benchmark_group(name.clone());
+        group.throughput(Throughput::BytesDecimal(sample.contents().len() as u64));
 
-        c.bench_function(&format!("encode(serde) {}", name), |b| {
+        let parsed = bencode::parse(sample.contents()).unwrap();
+
+        group.bench_function("encode(serde)", |b| {
             b.iter(|| {
-                bencode::to_bytes(&parsed)
-                    .unwrap();
+                bencode::value_to_bytes(parsed.clone()).unwrap();
             })
         });
     }
 }
 
-criterion_group!(benches, parse_torrents, encode_torrents, encode_torrents_serde);
+criterion_group!(
+    benches,
+    parse_torrents,
+    encode_torrents,
+    encode_torrents_serde
+);
 criterion_main!(benches);

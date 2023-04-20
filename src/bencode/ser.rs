@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 struct Serializer {
     buf: BytesMut,
-    last_value: Option<Value>,
+    last_value: Option<Value<Vec<u8>>>,
     ignoring_buffer: bool,
 }
 
@@ -144,7 +144,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         if !self.ignoring_buffer {
             encode_string(v.as_bytes(), &mut self.buf);
         }
-        self.last_value = Some(Value::String(v.to_string()));
+        self.last_value = Some(Value::Bytes(v.as_bytes().to_vec()));
 
         Ok(())
     }
@@ -260,7 +260,7 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 }
 
 struct SeqSerializer<'a> {
-    seq: Vec<Value>,
+    seq: Vec<Value<Vec<u8>>>,
     serializer: &'a mut Serializer,
 }
 
@@ -300,7 +300,7 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
 }
 
 struct StructSerializer<'a> {
-    entries: BTreeMap<String, Value>,
+    entries: BTreeMap<Vec<u8>, Value<Vec<u8>>>,
     serializer: &'a mut Serializer,
 }
 
@@ -329,7 +329,7 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
         self.serializer.without_buffering(|s| value.serialize(s))?;
 
         if let Some(v) = self.serializer.last_value.take() {
-            self.entries.insert(key.to_string(), v);
+            self.entries.insert(key.as_bytes().to_vec(), v);
         }
 
         Ok(())
@@ -347,8 +347,8 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
 }
 
 struct MapSerializer<'a> {
-    entries: BTreeMap<String, Value>,
-    current_key: Option<String>,
+    entries: BTreeMap<Vec<u8>, Value<Vec<u8>>>,
+    current_key: Option<Vec<u8>>,
     serializer: &'a mut Serializer,
 }
 
@@ -372,7 +372,7 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
         T: serde::Serialize,
     {
         self.serializer.without_buffering(|s| key.serialize(s))?;
-        if let Some(Value::String(s)) = self.serializer.last_value.take() {
+        if let Some(Value::Bytes(s)) = self.serializer.last_value.take() {
             self.current_key = Some(s);
             Ok(())
         } else {
@@ -405,9 +405,71 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     }
 }
 
+impl<B: AsRef<[u8]> + Ord> Value<B> {
+    fn into_serializable(self) -> impl serde::Serialize {
+        use serde_bytes::ByteBuf;
+
+        #[derive(serde::Serialize)]
+        #[serde(untagged)]
+        enum SerValue {
+            Bytes(ByteBuf),
+            Int(i64),
+            List(Vec<Self>),
+            Dict(BTreeMap<ByteBuf, Self>),
+        }
+
+        impl<B: AsRef<[u8]> + Ord> Into<SerValue> for Value<B> {
+            fn into(self) -> SerValue {
+                match self {
+                    Self::Bytes(bs) => SerValue::Bytes(ByteBuf::from(bs.as_ref().to_vec())),
+                    Self::Int(i) => SerValue::Int(i),
+                    Self::List(ls) => SerValue::List(ls.into_iter().map(Into::into).collect()),
+                    Self::Dict(d) => {
+                        let map = d
+                            .into_iter()
+                            .map(|(k, v)| (ByteBuf::from(k.as_ref().to_vec()), v.into()))
+                            .collect();
+                        SerValue::Dict(map)
+                    }
+                }
+            }
+        }
+
+        let sv: SerValue = self.into();
+        sv
+    }
+}
+
+pub fn value_to_bytes<B: AsRef<[u8]> + Ord>(value: Value<B>) -> Result<Bytes, Error> {
+    let ser = value.into_serializable();
+    to_bytes(&ser)
+}
+
 pub fn to_bytes<T: serde::Serialize>(value: &T) -> Result<Bytes, Error> {
     let mut serializer = Serializer::new();
     value.serialize(&mut serializer)?;
 
     Ok(serializer.buf.into())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use include_dir::{include_dir, Dir};
+
+    static TORRENT_SAMPLES_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/benches/samples/");
+
+    #[test]
+    fn encode_parsed_torrents() {
+        for sample in TORRENT_SAMPLES_DIR.files() {
+            let parsed = crate::bencode::parse(sample.contents()).expect(&format!(
+                "failed to parse sample file: {}",
+                sample.path().file_name().unwrap().to_string_lossy()
+            ));
+
+            let encoded = value_to_bytes(parsed);
+
+            assert!(encoded.is_ok());
+        }
+    }
 }

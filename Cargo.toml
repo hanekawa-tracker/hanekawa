@@ -24,6 +24,9 @@ criterion = "0"
 [features]
 fuzz = ["dep:arbitrary"]
 
+[profile.bench]
+lto = true
+
 [[bench]]
 name = "bencode"
 harness = false
