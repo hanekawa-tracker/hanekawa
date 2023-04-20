@@ -14,6 +14,7 @@ struct InfoHashData {
     incomplete: u32,
 }
 
+#[derive(Clone)]
 pub struct HttpTrackerService();
 
 impl HttpTrackerService {
