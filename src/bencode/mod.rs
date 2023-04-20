@@ -81,7 +81,9 @@ fn parse_string(input: &[u8]) -> IResult<&[u8], String> {
 }
 
 fn encode_string(bytes: &[u8], buf: &mut BytesMut) {
-    buf.put_slice(bytes.len().to_string().as_bytes());
+    let mut ws = itoa::Buffer::new();
+    buf.put_slice(ws.format(bytes.len()).as_bytes());
+
     buf.put_slice(":".as_bytes());
     buf.put_slice(bytes);
 }
