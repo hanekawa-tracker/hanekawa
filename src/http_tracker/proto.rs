@@ -15,7 +15,7 @@ pub struct AnnounceRequest {
     pub compact: Option<u8>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Debug, PartialEq)]
 pub struct Peer {
     #[serde(rename = "peer id")]
     pub peer_id: String,
@@ -23,7 +23,7 @@ pub struct Peer {
     pub port: u16,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Debug, PartialEq)]
 #[serde(untagged)]
 pub enum PeerData {
     Compact(#[serde(with = "serde_bytes")] Vec<u8>),
