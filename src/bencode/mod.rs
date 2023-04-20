@@ -17,6 +17,8 @@ use nom::{
 
 #[cfg_attr(feature = "fuzz", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, Eq)]
+#[derive(serde::Serialize)]
+#[serde(untagged)]
 pub enum Value {
     Bytes(Vec<u8>),
     String(String),

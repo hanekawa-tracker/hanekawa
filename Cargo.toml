@@ -17,5 +17,13 @@ serde_bytes = "0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tokio-util = { version = "0", features = ["net", "codec"] }
 
+[dev-dependencies]
+include_dir = "0"
+criterion = "0"
+
 [features]
 fuzz = ["dep:arbitrary"]
+
+[[bench]]
+name = "bencode"
+harness = false

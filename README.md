@@ -8,6 +8,7 @@ hanekawa doesn't know everything, she just knows what she knows.
 
 - High performance, comprehensively tested, and round-trip fuzzed `bencode` parser and encoder
 - Serde serializer for `bencode` structures
+- Benchmark suite for `bencode` parser and encoder
 - Implements several tracker-related [BEPs](https://www.bittorrent.org/beps/bep_0000.html)
 - Supports both HTTP and UDP tracking
 
@@ -21,4 +22,7 @@ hanekawa doesn't know everything, she just knows what she knows.
 
 ## License
 
-hanekawa is licensed under the GPLv3 license. 
+hanekawa is licensed under the GPLv3 license.
+
+Note: files in the `benches/samples` directory are not part of this project.
+They are from the [Internet Archive](https://archive.org/) and are **not** covered by this project's license. 
