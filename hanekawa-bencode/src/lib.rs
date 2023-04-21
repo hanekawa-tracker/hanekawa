@@ -1,8 +1,7 @@
+mod map;
 mod ser;
 
 pub use ser::to_bytes;
-
-use std::collections::BTreeMap;
 
 use bytes::{BufMut, BytesMut};
 
@@ -15,13 +14,15 @@ use nom::{
     IResult,
 };
 
+use map::Map;
+
 #[cfg_attr(feature = "fuzz", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value<B: Ord> {
     Bytes(B),
     Int(i64),
     List(Vec<Self>),
-    Dict(BTreeMap<B, Self>),
+    Dict(Map<B, Self>),
 }
 
 #[inline]
@@ -135,13 +136,17 @@ fn parse_dict(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
         map(
             fold_many0(
                 tuple((parse_bytes, parse_value)),
-                BTreeMap::new,
+                || Map::with_capacity(4),
                 |mut acc, (k, v)| {
                     acc.insert(k, v);
                     acc
                 },
             ),
-            |ps| Value::Dict(ps),
+            |mut ps| {
+                ps.ensure_order();
+
+                Value::Dict(ps)
+            },
         ),
         char('e'),
     )(input)
@@ -157,7 +162,7 @@ fn encode_dict_end(buf: &mut BytesMut) {
     buf.put_u8(b'e');
 }
 
-fn encode_dict<B: AsRef<[u8]> + Ord>(vs: &BTreeMap<B, Value<B>>, buf: &mut BytesMut) {
+fn encode_dict<B: AsRef<[u8]> + Ord>(vs: &Map<B, Value<B>>, buf: &mut BytesMut) {
     encode_dict_begin(buf);
     for (k, v) in vs {
         encode_string(k, buf);
