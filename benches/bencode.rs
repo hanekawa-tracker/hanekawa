@@ -48,7 +48,7 @@ pub fn encode_torrents_serde(c: &mut Criterion) {
 
         group.bench_function("encode(serde)", |b| {
             b.iter(|| {
-                bencode::value_to_bytes(parsed.clone()).unwrap();
+                bencode::to_bytes(&parsed).unwrap();
             })
         });
     }

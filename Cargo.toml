@@ -10,7 +10,7 @@ axum = "0"
 axum-extra = { version = "0", features = ["query"] }
 bytes = "1"
 futures = "0.3"
-itoa = "1"
+lexical = { version = "6", default_features = false, features = ["parse-integers", "write-integers"] }
 nom = "7"
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0"

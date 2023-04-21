@@ -1,32 +1,30 @@
-use super::{encode_dict, encode_integer, encode_list, encode_string, Value};
+use super::{
+    encode_dict_begin, encode_dict_end, encode_integer, encode_list_begin, encode_list_end,
+    encode_string, Value,
+};
 
 use bytes::{Bytes, BytesMut};
 use serde::ser::{self, Impossible};
-use std::collections::BTreeMap;
 
 struct Serializer {
     buf: BytesMut,
-    last_value: Option<Value<Vec<u8>>>,
-    ignoring_buffer: bool,
+    writing_map_key: bool,
 }
 
 impl Serializer {
     fn new() -> Self {
         Self {
             buf: BytesMut::new(),
-            last_value: None,
-            ignoring_buffer: false,
+            writing_map_key: false,
         }
     }
 
-    fn without_buffering<T>(&mut self, action: impl Fn(&mut Self) -> T) -> T {
-        let current = self.ignoring_buffer;
+    fn reject_if_writing_map_key(&self) -> Result<(), Error> {
+        if self.writing_map_key {
+            Err(Error::InvalidMapKey)?
+        }
 
-        self.ignoring_buffer = true;
-        let t = action(self);
-        self.ignoring_buffer = current;
-
-        t
+        Ok(())
     }
 }
 
@@ -104,10 +102,9 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        if !self.ignoring_buffer {
-            encode_integer(v, &mut self.buf);
-        }
-        self.last_value = Some(Value::Int(v));
+        self.reject_if_writing_map_key()?;
+
+        encode_integer(v, &mut self.buf);
 
         Ok(())
     }
@@ -141,24 +138,20 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        if !self.ignoring_buffer {
-            encode_string(v.as_bytes(), &mut self.buf);
-        }
-        self.last_value = Some(Value::Bytes(v.as_bytes().to_vec()));
+        encode_string(v.as_bytes(), &mut self.buf);
 
         Ok(())
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        if !self.ignoring_buffer {
-            encode_string(v, &mut self.buf);
-        }
-        self.last_value = Some(Value::Bytes(v.to_vec()));
+        encode_string(v, &mut self.buf);
 
         Ok(())
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        self.reject_if_writing_map_key()?;
+
         Ok(())
     }
 
@@ -170,6 +163,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        self.reject_if_writing_map_key()?;
+
         Ok(())
     }
 
@@ -210,8 +205,10 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         value.serialize(self)
     }
 
-    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Ok(SeqSerializer::new(len, self))
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        self.reject_if_writing_map_key()?;
+
+        Ok(SeqSerializer::new(self))
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
@@ -237,6 +234,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        self.reject_if_writing_map_key()?;
+
         Ok(MapSerializer::new(self))
     }
 
@@ -245,6 +244,8 @@ impl<'a> ser::Serializer for &'a mut Serializer {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
+        self.reject_if_writing_map_key()?;
+
         Ok(StructSerializer::new(self))
     }
 
@@ -260,16 +261,13 @@ impl<'a> ser::Serializer for &'a mut Serializer {
 }
 
 struct SeqSerializer<'a> {
-    seq: Vec<Value<Vec<u8>>>,
     serializer: &'a mut Serializer,
 }
 
 impl<'a> SeqSerializer<'a> {
-    fn new(len: Option<usize>, serializer: &'a mut Serializer) -> Self {
-        Self {
-            seq: Vec::with_capacity(len.unwrap_or(0)),
-            serializer,
-        }
+    fn new(serializer: &'a mut Serializer) -> Self {
+        encode_list_begin(&mut serializer.buf);
+        Self { serializer }
     }
 }
 
@@ -282,34 +280,23 @@ impl<'a> ser::SerializeSeq for SeqSerializer<'a> {
     where
         T: serde::Serialize,
     {
-        self.serializer.without_buffering(|s| value.serialize(s))?;
-        if let Some(v) = self.serializer.last_value.take() {
-            self.seq.push(v);
-        }
-        Ok(())
+        value.serialize(&mut *self.serializer)
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.serializer.ignoring_buffer {
-            encode_list(&self.seq, &mut self.serializer.buf);
-        }
-        self.serializer.last_value = Some(Value::List(self.seq));
-
+        encode_list_end(&mut self.serializer.buf);
         Ok(())
     }
 }
 
 struct StructSerializer<'a> {
-    entries: BTreeMap<Vec<u8>, Value<Vec<u8>>>,
     serializer: &'a mut Serializer,
 }
 
 impl<'a> StructSerializer<'a> {
     fn new(serializer: &'a mut Serializer) -> Self {
-        Self {
-            entries: BTreeMap::new(),
-            serializer,
-        }
+        encode_dict_begin(&mut serializer.buf);
+        Self { serializer }
     }
 }
 
@@ -326,39 +313,29 @@ impl<'a> ser::SerializeStruct for StructSerializer<'a> {
     where
         T: serde::Serialize,
     {
-        self.serializer.without_buffering(|s| value.serialize(s))?;
+        use serde::Serialize;
 
-        if let Some(v) = self.serializer.last_value.take() {
-            self.entries.insert(key.as_bytes().to_vec(), v);
-        }
+        key.serialize(&mut *self.serializer)?;
+        value.serialize(&mut *self.serializer)?;
 
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.serializer.ignoring_buffer {
-            encode_dict(&self.entries, &mut self.serializer.buf);
-        }
-
-        self.serializer.last_value = Some(Value::Dict(self.entries));
+        encode_dict_end(&mut self.serializer.buf);
 
         Ok(())
     }
 }
 
 struct MapSerializer<'a> {
-    entries: BTreeMap<Vec<u8>, Value<Vec<u8>>>,
-    current_key: Option<Vec<u8>>,
     serializer: &'a mut Serializer,
 }
 
 impl<'a> MapSerializer<'a> {
     fn new(serializer: &'a mut Serializer) -> Self {
-        Self {
-            entries: BTreeMap::new(),
-            current_key: None,
-            serializer,
-        }
+        encode_dict_begin(&mut serializer.buf);
+        Self { serializer }
     }
 }
 
@@ -371,78 +348,63 @@ impl<'a> ser::SerializeMap for MapSerializer<'a> {
     where
         T: serde::Serialize,
     {
-        self.serializer.without_buffering(|s| key.serialize(s))?;
-        if let Some(Value::Bytes(s)) = self.serializer.last_value.take() {
-            self.current_key = Some(s);
-            Ok(())
-        } else {
-            Err(Error::InvalidMapKey)
-        }
+        let current = self.serializer.writing_map_key;
+        self.serializer.writing_map_key = true;
+
+        key.serialize(&mut *self.serializer)?;
+
+        self.serializer.writing_map_key = current;
+
+        Ok(())
     }
 
     fn serialize_value<T: ?Sized>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: serde::Serialize,
     {
-        self.serializer.without_buffering(|s| value.serialize(s))?;
-
-        if let Some(v) = self.serializer.last_value.take() {
-            if let Some(k) = self.current_key.take() {
-                self.entries.insert(k, v);
-            }
-        }
+        value.serialize(&mut *self.serializer)?;
 
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        if !self.serializer.ignoring_buffer {
-            encode_dict(&self.entries, &mut self.serializer.buf);
-        }
-        self.serializer.last_value = Some(Value::Dict(self.entries));
+        encode_dict_end(&mut self.serializer.buf);
 
         Ok(())
     }
 }
 
-impl<B: AsRef<[u8]> + Ord> Value<B> {
-    fn into_serializable(self) -> impl serde::Serialize {
-        use serde_bytes::ByteBuf;
+impl<B: AsRef<[u8]> + Ord> serde::Serialize for Value<B> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Bytes(b) => serializer.serialize_bytes(b.as_ref()),
+            Self::Int(i) => serializer.serialize_i64(*i),
+            Self::List(vs) => {
+                use serde::ser::SerializeSeq;
 
-        #[derive(serde::Serialize)]
-        #[serde(untagged)]
-        enum SerValue {
-            Bytes(ByteBuf),
-            Int(i64),
-            List(Vec<Self>),
-            Dict(BTreeMap<ByteBuf, Self>),
-        }
-
-        impl<B: AsRef<[u8]> + Ord> Into<SerValue> for Value<B> {
-            fn into(self) -> SerValue {
-                match self {
-                    Self::Bytes(bs) => SerValue::Bytes(ByteBuf::from(bs.as_ref().to_vec())),
-                    Self::Int(i) => SerValue::Int(i),
-                    Self::List(ls) => SerValue::List(ls.into_iter().map(Into::into).collect()),
-                    Self::Dict(d) => {
-                        let map = d
-                            .into_iter()
-                            .map(|(k, v)| (ByteBuf::from(k.as_ref().to_vec()), v.into()))
-                            .collect();
-                        SerValue::Dict(map)
-                    }
+                let mut s = serializer.serialize_seq(Some(vs.len()))?;
+                for v in vs {
+                    s.serialize_element(v)?;
                 }
+                s.end()
+            }
+            Self::Dict(es) => {
+                use serde::ser::SerializeMap;
+                use serde_bytes::Bytes;
+
+                let mut s = serializer.serialize_map(Some(es.len()))?;
+                for (k, v) in es {
+                    // Serialize the key as Bytes, not a seq of u8.
+                    s.serialize_key(&Bytes::new(k.as_ref()))?;
+                    s.serialize_value(v)?;
+                }
+                s.end()
             }
         }
-
-        let sv: SerValue = self.into();
-        sv
     }
-}
-
-pub fn value_to_bytes<B: AsRef<[u8]> + Ord>(value: Value<B>) -> Result<Bytes, Error> {
-    let ser = value.into_serializable();
-    to_bytes(&ser)
 }
 
 pub fn to_bytes<T: serde::Serialize>(value: &T) -> Result<Bytes, Error> {
@@ -467,7 +429,8 @@ mod test {
                 sample.path().file_name().unwrap().to_string_lossy()
             ));
 
-            let encoded = value_to_bytes(parsed);
+            let encoded = to_bytes(&parsed);
+            dbg!(&encoded);
 
             assert!(encoded.is_ok());
         }

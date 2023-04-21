@@ -1,6 +1,6 @@
 mod ser;
 
-pub use ser::{to_bytes, value_to_bytes};
+pub use ser::to_bytes;
 
 use std::collections::BTreeMap;
 
@@ -8,10 +8,9 @@ use bytes::{BufMut, BytesMut};
 
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::digit1,
+    character::complete::{char, digit1},
     combinator::{all_consuming, map, opt, recognize, verify},
-    multi::many0,
+    multi::{fold_many0, many0},
     sequence::{delimited, terminated, tuple},
     IResult,
 };
@@ -25,21 +24,19 @@ pub enum Value<B: Ord> {
     Dict(BTreeMap<B, Self>),
 }
 
+#[inline]
 fn parse_numeric(input: &[u8]) -> IResult<&[u8], u32> {
-    let (input, len) = digit1(input)?;
-    let len = unsafe {
-        // ASCII digits are always valid UTF-8
-        std::str::from_utf8_unchecked(len)
-    };
-    let len: u32 = len.parse().unwrap();
-    Ok((input, len))
+    let (input, num) = digit1(input)?;
+    let num = lexical::parse(&num).unwrap();
+    Ok((input, num))
 }
 
+#[inline]
 fn parse_bytes(input: &[u8]) -> IResult<&[u8], &[u8]> {
     use nom::error::{Error, ErrorKind};
 
     let (input, len) = parse_numeric(input)?;
-    let (input, _) = tag(":")(input)?;
+    let (input, _) = char(':')(input)?;
 
     if input.len() >= len as usize {
         let (s, rest) = input.split_at(len as usize);
@@ -50,105 +47,133 @@ fn parse_bytes(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 // parses <len>:<str>
-fn parse_string_or_bytes_value(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
+#[inline]
+fn parse_bytes_value(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
     map(parse_bytes, |bs| Value::Bytes(bs))(input)
 }
 
 fn encode_string<B: AsRef<[u8]> + Ord>(bytes: B, buf: &mut BytesMut) {
-    let bytes = bytes.as_ref();
-    let mut ws = itoa::Buffer::new();
-    buf.put_slice(ws.format(bytes.len()).as_bytes());
+    use lexical::{FormattedSize, ToLexical};
+    let mut digits = [0; usize::FORMATTED_SIZE_DECIMAL];
 
+    let bytes = bytes.as_ref();
+
+    buf.put_slice(bytes.len().to_lexical(&mut digits));
     buf.put_u8(b':');
     buf.put_slice(&bytes);
 }
 
+#[inline]
 fn parse_integer_numeric_part(input: &[u8]) -> IResult<&[u8], i64> {
     let (input, matched) = alt((
-        recognize(tag("0")),
+        recognize(char('0')),
         recognize(tuple((
-            opt(tag("-")),
+            opt(char('-')),
             verify(digit1, |ds: &[u8]| ds[0] != '0' as u8),
         ))),
     ))(input)?;
 
-    let matched = unsafe {
-        // [+]ASCII digits are always valid UTF-8.
-        std::str::from_utf8_unchecked(matched)
-    };
-    let matched: i64 = matched.parse().unwrap();
+    let matched: i64 = lexical::parse(matched).unwrap();
 
     Ok((input, matched))
 }
 
 // parses i<num>e
+#[inline]
 fn parse_integer(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
     let result = delimited(
-        tag("i"),
+        char('i'),
         map(parse_integer_numeric_part, |i| Value::Int(i)),
-        tag("e"),
+        char('e'),
     )(input)?;
 
     Ok(result)
 }
 
 fn encode_integer(i: i64, buf: &mut BytesMut) {
-    buf.put_slice("i".as_bytes());
-    let mut ws = itoa::Buffer::new();
-    buf.put_slice(ws.format(i).as_bytes());
-    buf.put_slice("e".as_bytes());
+    use lexical::{FormattedSize, ToLexical};
+    let mut digits = [0; usize::FORMATTED_SIZE_DECIMAL];
+
+    buf.put_u8(b'i');
+    buf.put_slice(i.to_lexical(&mut digits));
+    buf.put_u8(b'e');
 }
 
 // parses l<value*>e
+#[inline]
 fn parse_list(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
     delimited(
-        tag("l"),
+        char('l'),
         map(many0(parse_value), |vs| Value::List(vs)),
-        tag("e"),
+        char('e'),
     )(input)
+}
+
+#[inline]
+fn encode_list_begin(buf: &mut BytesMut) {
+    buf.put_u8(b'l');
+}
+
+#[inline]
+fn encode_list_end(buf: &mut BytesMut) {
+    buf.put_u8(b'e')
 }
 
 fn encode_list<B: AsRef<[u8]> + Ord>(vs: &Vec<Value<B>>, buf: &mut BytesMut) {
-    buf.put_slice("l".as_bytes());
+    encode_list_begin(buf);
     for v in vs {
         encode_value(v, buf);
     }
-    buf.put_slice("e".as_bytes())
+    encode_list_end(buf);
 }
 
 // d<(<str><value>)*>e
+#[inline]
 fn parse_dict(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
     delimited(
-        tag("d"),
-        map(many0(tuple((parse_bytes, parse_value))), |ps| {
-            Value::Dict(ps.into_iter().collect())
-        }),
-        tag("e"),
+        char('d'),
+        map(
+            fold_many0(
+                tuple((parse_bytes, parse_value)),
+                BTreeMap::new,
+                |mut acc, (k, v)| {
+                    acc.insert(k, v);
+                    acc
+                },
+            ),
+            |ps| Value::Dict(ps),
+        ),
+        char('e'),
     )(input)
 }
 
+#[inline]
+fn encode_dict_begin(buf: &mut BytesMut) {
+    buf.put_u8(b'd');
+}
+
+#[inline]
+fn encode_dict_end(buf: &mut BytesMut) {
+    buf.put_u8(b'e');
+}
+
 fn encode_dict<B: AsRef<[u8]> + Ord>(vs: &BTreeMap<B, Value<B>>, buf: &mut BytesMut) {
-    buf.put_slice("d".as_bytes());
+    encode_dict_begin(buf);
     for (k, v) in vs {
         encode_string(k, buf);
         encode_value(v, buf);
     }
-    buf.put_slice("e".as_bytes())
+    encode_dict_end(buf);
 }
 
+#[inline]
 fn parse_value(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
-    alt((
-        parse_string_or_bytes_value,
-        parse_integer,
-        parse_list,
-        parse_dict,
-    ))(input)
+    alt((parse_bytes_value, parse_integer, parse_list, parse_dict))(input)
 }
 
 fn encode_value<B: AsRef<[u8]> + Ord>(value: &Value<B>, buf: &mut BytesMut) {
     match value {
         Value::Bytes(b) => encode_string(&b, buf),
-        // Value::String(s) => encode_string(s.as_bytes(), buf),
         Value::Int(i) => encode_integer(*i, buf),
         Value::List(vs) => encode_list(vs, buf),
         Value::Dict(vs) => encode_dict(vs, buf),
@@ -163,7 +188,7 @@ pub fn encode<B: AsRef<[u8]> + Ord>(value: &Value<B>) -> Vec<u8> {
 }
 
 pub fn parse(input: &[u8]) -> Result<Value<&[u8]>, ()> {
-    let result = all_consuming(terminated(parse_value, opt(tag("\n"))))(input);
+    let result = all_consuming(terminated(parse_value, opt(char('\n'))))(input);
     match result {
         Ok((_, v)) => Ok(v),
         e => Err(()),
