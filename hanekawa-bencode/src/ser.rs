@@ -424,7 +424,7 @@ mod test {
     #[test]
     fn encode_parsed_torrents() {
         for sample in TORRENT_SAMPLES_DIR.files() {
-            let parsed = crate::bencode::parse(sample.contents()).expect(&format!(
+            let parsed = crate::parse(sample.contents()).expect(&format!(
                 "failed to parse sample file: {}",
                 sample.path().file_name().unwrap().to_string_lossy()
             ));

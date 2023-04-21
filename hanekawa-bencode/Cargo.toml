@@ -1,0 +1,23 @@
+[package]
+name = "hanekawa-bencode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+arbitrary = { version = "1", features = ["derive"], optional = true }
+bytes = "1"
+lexical = { version = "6", default_features = false, features = ["parse-integers", "write-integers"] }
+nom = "7"
+serde = { version = "1", features = ["derive"] }
+serde_bytes = "0"
+
+[dev-dependencies]
+include_dir = "0"
+criterion = "0"
+
+[features]
+fuzz = ["dep:arbitrary"]
+
+[[bench]]
+name = "bencode"
+harness = false

@@ -1,5 +1,3 @@
-use crate::bencode;
-
 use axum::http::{header, status, HeaderValue};
 use axum::response::IntoResponse;
 
@@ -12,7 +10,7 @@ where
     T: serde::Serialize,
 {
     fn into_response(self) -> axum::response::Response {
-        let encoded = bencode::to_bytes(&self.0);
+        let encoded = hanekawa_bencode::to_bytes(&self.0);
         match encoded {
             Ok(bs) => (
                 [(

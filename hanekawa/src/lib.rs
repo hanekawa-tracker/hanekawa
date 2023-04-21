@@ -1,4 +1,3 @@
-pub mod bencode;
 mod http_tracker;
 mod server;
 mod types;

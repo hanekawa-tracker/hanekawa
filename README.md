@@ -24,5 +24,5 @@ hanekawa doesn't know everything, she just knows what she knows.
 
 hanekawa is licensed under the GPLv3 license.
 
-Note: files in the `benches/samples` directory are not part of this project.
+Note: files in the `hanekawa-bencode/benches/samples` directory are not part of this project.
 They are from the [Internet Archive](https://archive.org/) and are **not** covered by this project's license. 

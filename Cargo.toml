@@ -1,32 +1,10 @@
-[package]
-name = "hanekawa"
-version = "0.1.0"
-edition = "2021"
-license = "GPL-3.0-only"
+[workspace]
 
-[dependencies]
-arbitrary = { version = "1", features = ["derive"], optional = true }
-axum = "0"
-axum-extra = { version = "0", features = ["query"] }
-bytes = "1"
-futures = "0.3"
-lexical = { version = "6", default_features = false, features = ["parse-integers", "write-integers"] }
-nom = "7"
-serde = { version = "1", features = ["derive"] }
-serde_bytes = "0"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-tokio-util = { version = "0", features = ["net", "codec"] }
-
-[dev-dependencies]
-include_dir = "0"
-criterion = "0"
-
-[features]
-fuzz = ["dep:arbitrary"]
+members = [
+  "hanekawa",
+  "hanekawa-bencode"
+]
 
 [profile.bench]
+debug = true
 lto = true
-
-[[bench]]
-name = "bencode"
-harness = false

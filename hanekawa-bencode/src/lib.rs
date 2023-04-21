@@ -109,12 +109,12 @@ fn parse_list(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
     )(input)
 }
 
-#[inline]
+#[inline(always)]
 fn encode_list_begin(buf: &mut BytesMut) {
     buf.put_u8(b'l');
 }
 
-#[inline]
+#[inline(always)]
 fn encode_list_end(buf: &mut BytesMut) {
     buf.put_u8(b'e')
 }
@@ -147,12 +147,12 @@ fn parse_dict(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
     )(input)
 }
 
-#[inline]
+#[inline(always)]
 fn encode_dict_begin(buf: &mut BytesMut) {
     buf.put_u8(b'd');
 }
 
-#[inline]
+#[inline(always)]
 fn encode_dict_end(buf: &mut BytesMut) {
     buf.put_u8(b'e');
 }
