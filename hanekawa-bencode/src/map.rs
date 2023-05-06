@@ -10,6 +10,10 @@ impl<K: Ord, V> Map<K, V> {
         }
     }
 
+    pub fn from_raw(entries: Vec<(K, V)>) -> Self {
+        Self { entries }
+    }
+
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             entries: Vec::with_capacity(capacity),

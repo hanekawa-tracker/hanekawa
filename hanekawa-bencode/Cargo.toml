@@ -7,6 +7,7 @@ edition = "2021"
 arbitrary = { version = "1", features = ["derive"], optional = true }
 bytes = "1"
 lexical = { version = "6", default_features = false, features = ["parse-integers", "write-integers"] }
+memchr = "2"
 nom = "7"
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0"
