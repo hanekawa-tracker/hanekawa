@@ -205,6 +205,11 @@ pub fn rd_parse(input: &[u8]) -> Result<Value<&[u8]>, ()> {
     parser.parse().map_err(|_| ())
 }
 
+pub fn rd_eparse(input: &[u8]) -> Result<rd::Elements, ()> {
+    let parser = rd::Parser::new(input);
+    parser.eparse().map_err(|_| ())
+}
+
 mod rd {
     use super::*;
 
@@ -221,6 +226,19 @@ mod rd {
         map: Vec<(&'a [u8], Value<&'a [u8]>)>,
     }
 
+    #[derive(Debug)]
+    pub enum Element<'a> {
+        DictBegin(usize),
+        ListBegin(usize),
+        Int(i64),
+        Bytes(&'a [u8]),
+    }
+
+    #[derive(Debug)]
+    pub struct Elements<'a> {
+        elements: Vec<Element<'a>>,
+    }
+
     impl<'a> ParseBufs<'a> {
         fn new() -> Self {
             Self {
@@ -233,12 +251,18 @@ mod rd {
     pub struct Parser<'a> {
         input: &'a [u8],
         bufs: ParseBufs<'a>,
+        elements: Vec<Element<'a>>,
     }
 
     impl<'a> Parser<'a> {
         pub fn new(input: &'a [u8]) -> Self {
             let bufs = ParseBufs::new();
-            Self { input, bufs }
+            let elements = Vec::with_capacity(10);
+            Self {
+                input,
+                bufs,
+                elements,
+            }
         }
 
         #[inline(always)]
@@ -276,11 +300,11 @@ mod rd {
         }
 
         #[inline(always)]
-        fn bump(&mut self) -> Result<(), Error> {
+        fn bump(&mut self) -> Result<u8, Error> {
             match self.input.split_first() {
-                Some((_, tail)) => {
+                Some((t, tail)) => {
                     self.input = tail;
-                    Ok(())
+                    Ok(*t)
                 }
                 _ => Err(Error::UnexpectedEnd("bump".to_string())),
             }
@@ -299,11 +323,22 @@ mod rd {
 
         fn parse_string(&mut self) -> Result<&'a [u8], Error> {
             let len = self.take_until(b':')?;
-            self.bump()?;
+            self.bump_assert();
             let len_num = Self::parse_raw_int(len)?;
             let str = self.take_n(len_num)?;
 
             Ok(str)
+        }
+
+        fn parse_estring(&mut self) -> Result<(), Error> {
+            let len = self.take_until(b':')?;
+            self.bump_assert();
+            let len_num = Self::parse_raw_int(len)?;
+            let str = self.take_n(len_num)?;
+
+            self.elements.push(Element::Bytes(str));
+
+            Ok(())
         }
 
         fn parse_dict(&mut self) -> Result<Value<&'a [u8]>, Error> {
@@ -323,6 +358,27 @@ mod rd {
             Ok(Value::Dict(map))
         }
 
+        fn parse_edict(&mut self) -> Result<(), Error> {
+            self.bump_assert();
+
+            let header_idx = self.elements.len();
+            self.elements.push(Element::DictBegin(0));
+
+            let mut ct = 0;
+
+            while self.peek() != Some(b'e') {
+                self.parse_estring()?;
+                self.parse_evalue()?;
+                ct += 1;
+            }
+
+            self.bump_assert();
+
+            self.elements[header_idx] = Element::DictBegin(ct);
+
+            Ok(())
+        }
+
         fn parse_int(&mut self) -> Result<Value<&'a [u8]>, Error> {
             self.bump_assert();
 
@@ -336,6 +392,23 @@ mod rd {
             self.bump_assert();
 
             Ok(Value::Int(num))
+        }
+
+        fn parse_eint(&mut self) -> Result<(), Error> {
+            self.bump_assert();
+
+            let num = self.take_until(b'e')?;
+            // Reject leading -0 and leading 0, but not 0 itself.
+            if num.starts_with(&[b'-', b'0']) || (num.starts_with(&[b'0']) && num.len() != 1) {
+                Err(Error::InvalidInt(num.to_vec()))?;
+            }
+            let num = lexical::parse(&num).unwrap();
+
+            self.bump_assert();
+
+            self.elements.push(Element::Int(num));
+
+            Ok(())
         }
 
         fn parse_list(&mut self) -> Result<Value<&'a [u8]>, Error> {
@@ -354,6 +427,27 @@ mod rd {
             Ok(Value::List(list))
         }
 
+        fn parse_elist(&mut self) -> Result<(), Error> {
+            self.bump_assert();
+
+            let header_idx = self.elements.len();
+
+            self.elements.push(Element::ListBegin(0));
+
+            let mut ct = 0;
+
+            while self.peek() != Some(b'e') {
+                self.parse_evalue()?;
+                ct += 1;
+            }
+
+            self.bump_assert();
+
+            self.elements[header_idx] = Element::ListBegin(ct);
+
+            Ok(())
+        }
+
         fn parse_value(&mut self) -> Result<Value<&'a [u8]>, Error> {
             match self.peek() {
                 Some(b'd') => self.parse_dict(),
@@ -364,10 +458,31 @@ mod rd {
             }
         }
 
+        fn parse_evalue(&mut self) -> Result<(), Error> {
+            match self.peek() {
+                Some(b'd') => self.parse_edict(),
+                Some(b'i') => self.parse_eint(),
+                Some(b'l') => self.parse_elist(),
+                Some(b'0'..=b'9') => self.parse_estring(),
+                _ => Err(Error::UnexpectedEnd("parse_value".to_string())),
+            }
+        }
+
         pub fn parse(mut self) -> Result<Value<&'a [u8]>, Error> {
             let value = self.parse_value()?;
             if self.is_done() {
                 Ok(value)
+            } else {
+                Err(Error::Trailing)
+            }
+        }
+
+        pub fn eparse(mut self) -> Result<Elements<'a>, Error> {
+            self.parse_evalue()?;
+            if self.is_done() {
+                Ok(Elements {
+                    elements: self.elements,
+                })
             } else {
                 Err(Error::Trailing)
             }
