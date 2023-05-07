@@ -1,4 +1,9 @@
-// BEP 15: UDP Tracker Protocol for BitTorrent
+mod extensions;
+
+use hanekawa::types::Event;
+use hanekawa::udp_tracker::proto::*;
+
+use extensions::parse_extensions;
 
 use bytes::{BufMut, BytesMut};
 use nom::{
@@ -11,16 +16,7 @@ use nom::{
     IResult,
 };
 
-use crate::types::Event;
-
-use super::extension_bits::{parse_extensions, Extension};
-
 const PROTOCOL_ID: u64 = 0x41727101980;
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct ConnectRequest {
-    transaction_id: i32,
-}
 
 fn parse_connect_request(input: &[u8]) -> IResult<&[u8], ConnectRequest> {
     let (input, (_, _, tid)) = tuple((
@@ -37,32 +33,10 @@ fn parse_connect_request(input: &[u8]) -> IResult<&[u8], ConnectRequest> {
     ))
 }
 
-pub struct ConnectResponse {
-    transaction_id: i32,
-    connection_id: i64,
-}
-
 fn encode_connect_response(resp: &ConnectResponse, buf: &mut BytesMut) {
     buf.put_i32(0);
     buf.put_i32(resp.transaction_id);
     buf.put_i64(resp.connection_id);
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct AnnounceRequest {
-    connection_id: i64,
-    transaction_id: i32,
-    info_hash: String,
-    peer_id: String,
-    downloaded: i64,
-    left: i64,
-    uploaded: i64,
-    event: Option<Event>,
-    ip_address: Option<i32>,
-    key: i32,
-    num_want: Option<i32>,
-    port: i16,
-    extensions: Vec<Extension>,
 }
 
 fn parse_20_bit_string(input: &[u8]) -> IResult<&[u8], String> {
@@ -151,14 +125,6 @@ fn parse_announce_request(input: &[u8]) -> IResult<&[u8], AnnounceRequest> {
     ))
 }
 
-pub struct AnnounceResponse {
-    transaction_id: i32,
-    interval: i32,
-    leechers: i32,
-    seeders: i32,
-    peers: Vec<(i32, i16)>,
-}
-
 fn encode_announce_response(resp: &AnnounceResponse, buf: &mut BytesMut) {
     buf.put_i32(1);
     buf.put_i32(resp.transaction_id);
@@ -170,13 +136,6 @@ fn encode_announce_response(resp: &AnnounceResponse, buf: &mut BytesMut) {
         buf.put_i32(*ip);
         buf.put_i16(*port);
     }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct ScrapeRequest {
-    connection_id: i64,
-    transaction_id: i32,
-    info_hashes: Vec<String>,
 }
 
 fn parse_scrape_request(input: &[u8]) -> IResult<&[u8], ScrapeRequest> {
@@ -197,17 +156,6 @@ fn parse_scrape_request(input: &[u8]) -> IResult<&[u8], ScrapeRequest> {
     ))
 }
 
-pub struct InfoHashScrapeData {
-    seeders: i32,
-    completed: i32,
-    leechers: i32,
-}
-
-pub struct ScrapeResponse {
-    transaction_id: i32,
-    data: Vec<InfoHashScrapeData>,
-}
-
 fn encode_scrape_response(resp: &ScrapeResponse, buf: &mut BytesMut) {
     buf.put_i32(2);
     buf.put_i32(resp.transaction_id);
@@ -218,36 +166,11 @@ fn encode_scrape_response(resp: &ScrapeResponse, buf: &mut BytesMut) {
     }
 }
 
-pub struct ErrorResponse {
-    transaction_id: i32,
-    message: String,
-}
-
 fn encode_error_response(resp: &ErrorResponse, buf: &mut BytesMut) {
     buf.put_i32(3);
     buf.put_i32(resp.transaction_id);
     buf.put_slice(resp.message.as_bytes())
 }
-
-#[derive(Debug)]
-pub enum Request {
-    Connect(ConnectRequest),
-    Announce(AnnounceRequest),
-    Scrape(ScrapeRequest),
-}
-
-#[derive(Debug)]
-pub enum Error {
-    Other(()),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Other error")
-    }
-}
-
-impl std::error::Error for Error {}
 
 pub fn parse_request(input: &[u8]) -> Result<Request, Error> {
     let result = all_consuming(alt((
@@ -262,13 +185,6 @@ pub fn parse_request(input: &[u8]) -> Result<Request, Error> {
     }
 }
 
-pub enum Response {
-    Connect(ConnectResponse),
-    Announce(AnnounceResponse),
-    Scrape(ScrapeResponse),
-    Error(ErrorResponse),
-}
-
 pub fn encode_response(response: &Response, buf: &mut BytesMut) {
     use Response::*;
 
@@ -277,100 +193,5 @@ pub fn encode_response(response: &Response, buf: &mut BytesMut) {
         Announce(r) => encode_announce_response(r, buf),
         Scrape(r) => encode_scrape_response(r, buf),
         Error(r) => encode_error_response(r, buf),
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn parses_connection_request() {
-        let mut buf = BytesMut::new();
-
-        buf.put_u64(PROTOCOL_ID);
-        buf.put_i32(0);
-        buf.put_i32(42);
-
-        assert_eq!(
-            Ok((&[] as &[u8], ConnectRequest { transaction_id: 42 })),
-            parse_connect_request(&buf)
-        )
-    }
-
-    #[test]
-    fn parses_announce_request() {
-        let mut buf = BytesMut::new();
-
-        let peer_id = "12345678901234567890";
-        let info_hash = "09876543210987654321";
-
-        buf.put_i64(42);
-        buf.put_i32(1);
-        buf.put_i32(32);
-        buf.put_slice(info_hash.as_bytes());
-        buf.put_slice(peer_id.as_bytes());
-        buf.put_i64(3);
-        buf.put_i64(4);
-        buf.put_i64(5);
-        buf.put_i32(3);
-        buf.put_i32(0);
-        buf.put_i32(17);
-        buf.put_i32(-1);
-        buf.put_i16(3001);
-
-        assert_eq!(
-            Ok((
-                &[] as &[u8],
-                AnnounceRequest {
-                    connection_id: 42,
-                    transaction_id: 32,
-                    info_hash: info_hash.to_string(),
-                    peer_id: peer_id.to_string(),
-                    downloaded: 3,
-                    left: 4,
-                    uploaded: 5,
-                    event: Some(Event::Stopped),
-                    ip_address: None,
-                    key: 17,
-                    num_want: None,
-                    port: 3001,
-                    extensions: Vec::new()
-                }
-            )),
-            parse_announce_request(&buf)
-        )
-    }
-
-    #[test]
-    fn parses_scrape_request() {
-        let mut buf = BytesMut::new();
-
-        let info_hash = "01234567890123456789".to_string();
-        let num_hashes = 6;
-
-        let mut hashes = Vec::new();
-        for _ in 0..num_hashes {
-            hashes.push(info_hash.clone());
-        }
-
-        buf.put_i64(42);
-        buf.put_i32(2);
-        buf.put_i32(32);
-        for _ in 0..num_hashes {
-            buf.put_slice(info_hash.as_bytes())
-        }
-
-        assert_eq!(
-            Ok((
-                &[] as &[u8],
-                ScrapeRequest {
-                    connection_id: 42,
-                    transaction_id: 32,
-                    info_hashes: hashes
-                }
-            )),
-            parse_scrape_request(&buf)
-        )
     }
 }

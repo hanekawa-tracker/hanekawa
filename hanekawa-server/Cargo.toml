@@ -1,0 +1,20 @@
+[package]
+name = "hanekawa-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+hanekawa = { path = "../hanekawa" }
+hanekawa-bencode = { path = "../hanekawa-bencode" }
+hanekawa-udp = { path = "../hanekawa-udp" }
+axum = "0"
+axum-extra = { version = "0", features = ["query"] }
+bytes = "1"
+futures = "0.3"
+serde = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio-util = { version = "0", features = ["net", "codec"] }

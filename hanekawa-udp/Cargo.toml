@@ -1,5 +1,5 @@
 [package]
-name = "hanekawa"
+name = "hanekawa-udp"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,6 +8,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+hanekawa = { path = "../hanekawa" }
 bytes = "1"
-serde = { version = "1", features = ["derive"] }
-serde_bytes = "0"
+nom = "7"

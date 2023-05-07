@@ -488,9 +488,8 @@ mod test {
             ));
 
             let encoded = to_bytes(&parsed);
-            dbg!(&encoded);
 
-            assert!(encoded.is_ok());
+            assert_eq!(sample.contents(), encoded.unwrap());
         }
     }
 }

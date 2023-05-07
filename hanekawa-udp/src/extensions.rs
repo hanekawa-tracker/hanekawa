@@ -1,5 +1,7 @@
 // BEP 41: UDP Tracker Protocol Extensions
 
+use hanekawa::udp_tracker::proto::Extension;
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take},
@@ -9,13 +11,6 @@ use nom::{
     sequence::terminated,
     IResult,
 };
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum Extension {
-    Nop,
-    UrlData(String),
-    Unknown(u8, String),
-}
 
 fn parse_three_part_option(input: &[u8]) -> IResult<&[u8], (u8, String)> {
     let (input, id) = be_u8(input)?;

@@ -9,5 +9,3 @@ fuzz_target!(|input: Value<&[u8]>| {
     let parsed_val = parse(&encoded);
     assert_eq!(expected, parsed_val);
 });
-
-

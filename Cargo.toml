@@ -1,9 +1,18 @@
 [workspace]
-
 members = [
   "hanekawa",
-  "hanekawa-bencode"
+  "hanekawa-bencode",
+  "hanekawa-server",
+  "hanekawa-udp",
 ]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["toshokan <toshokan@shojigate.net>"]
+homepage = "https://github.com/toshokan/hanekawa"
+repository = "https://github.com/toshokan/hanekawa"
+license = "GPL-3.0-only"
 
 [profile.bench]
 debug = true
