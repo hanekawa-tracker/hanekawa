@@ -20,41 +20,13 @@ pub fn parse_torrents(c: &mut Criterion) {
     }
 }
 
-pub fn parse_torrents_rd(c: &mut Criterion) {
-    for sample in TORRENT_SAMPLES.files() {
-        let name = sample.path().file_name().unwrap().to_string_lossy();
-
-        let mut group = c.benchmark_group(name.clone());
-        group.throughput(Throughput::BytesDecimal(sample.contents().len() as u64));
-
-        group.bench_function("parse(rd)", |b| {
-            b.iter(|| {
-                hanekawa_bencode::rd_parse(black_box(sample.contents())).unwrap();
-            })
-        });
-    }
-}
-
-pub fn parse_torrents_erd(c: &mut Criterion) {
-    for sample in TORRENT_SAMPLES.files() {
-        let name = sample.path().file_name().unwrap().to_string_lossy();
-
-        let mut group = c.benchmark_group(name.clone());
-        group.throughput(Throughput::BytesDecimal(sample.contents().len() as u64));
-
-        group.bench_function("parse(erd)", |b| {
-            b.iter(|| {
-                hanekawa_bencode::rd_eparse(black_box(sample.contents())).unwrap();
-            })
-        });
-    }
-}
-
 pub fn encode_torrents(c: &mut Criterion) {
     for sample in TORRENT_SAMPLES.files() {
         let name = sample.path().file_name().unwrap().to_string_lossy();
 
-        let parsed = hanekawa_bencode::parse(sample.contents()).unwrap();
+        let parsed = hanekawa_bencode::parse(sample.contents())
+            .unwrap()
+            .into_value();
 
         let mut group = c.benchmark_group(name.clone());
         group.throughput(Throughput::BytesDecimal(sample.contents().len() as u64));
@@ -87,8 +59,6 @@ pub fn encode_torrents_serde(c: &mut Criterion) {
 criterion_group!(
     benches,
     parse_torrents,
-    parse_torrents_rd,
-    parse_torrents_erd,
     encode_torrents,
     encode_torrents_serde
 );

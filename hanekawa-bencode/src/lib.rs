@@ -5,15 +5,6 @@ pub use ser::to_bytes;
 
 use bytes::{BufMut, BytesMut};
 
-use nom::{
-    branch::alt,
-    character::complete::{char, digit1},
-    combinator::{all_consuming, map, opt, recognize, verify},
-    multi::{fold_many0, many0},
-    sequence::{delimited, terminated, tuple},
-    IResult,
-};
-
 use map::Map;
 
 #[cfg_attr(feature = "fuzz", derive(arbitrary::Arbitrary))]
@@ -25,32 +16,42 @@ pub enum Value<B: Ord> {
     Dict(Map<B, Self>),
 }
 
-#[inline]
-fn parse_numeric(input: &[u8]) -> IResult<&[u8], u32> {
-    let (input, num) = digit1(input)?;
-    let num = lexical::parse(&num).unwrap();
-    Ok((input, num))
-}
+impl<B: Ord> Value<B> {
+    pub fn into_elements(self) -> Elements<B> {
+        pub struct IntoElements<B> {
+            elements: Vec<Element<B>>,
+        }
 
-#[inline]
-fn parse_bytes(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    use nom::error::{Error, ErrorKind};
+        impl<B: Ord> IntoElements<B> {
+            fn into_elements(&mut self, value: Value<B>) {
+                match value {
+                    Value::Bytes(bs) => self.elements.push(Element::Bytes(bs)),
+                    Value::Int(i) => self.elements.push(Element::Int(i)),
+                    Value::List(vs) => {
+                        self.elements.push(Element::ListBegin(vs.len()));
+                        for v in vs {
+                            self.into_elements(v)
+                        }
+                    }
+                    Value::Dict(m) => {
+                        self.elements.push(Element::DictBegin(m.len()));
+                        for (k, v) in m {
+                            self.elements.push(Element::Bytes(k));
+                            self.into_elements(v);
+                        }
+                    }
+                }
+            }
+        }
 
-    let (input, len) = parse_numeric(input)?;
-    let (input, _) = char(':')(input)?;
-
-    if input.len() >= len as usize {
-        let (s, rest) = input.split_at(len as usize);
-        return Ok((rest, s));
+        let mut ii = IntoElements {
+            elements: Vec::with_capacity(10),
+        };
+        ii.into_elements(self);
+        Elements {
+            elements: ii.elements,
+        }
     }
-
-    Err(nom::Err::Failure(Error::new(input, ErrorKind::Eof)))
-}
-
-// parses <len>:<str>
-#[inline]
-fn parse_bytes_value(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
-    map(parse_bytes, |bs| Value::Bytes(bs))(input)
 }
 
 fn encode_string<B: AsRef<[u8]> + Ord>(bytes: B, buf: &mut BytesMut) {
@@ -64,33 +65,6 @@ fn encode_string<B: AsRef<[u8]> + Ord>(bytes: B, buf: &mut BytesMut) {
     buf.put_slice(&bytes);
 }
 
-#[inline]
-fn parse_integer_numeric_part(input: &[u8]) -> IResult<&[u8], i64> {
-    let (input, matched) = alt((
-        recognize(char('0')),
-        recognize(tuple((
-            opt(char('-')),
-            verify(digit1, |ds: &[u8]| ds[0] != '0' as u8),
-        ))),
-    ))(input)?;
-
-    let matched: i64 = lexical::parse(matched).unwrap();
-
-    Ok((input, matched))
-}
-
-// parses i<num>e
-#[inline]
-fn parse_integer(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
-    let result = delimited(
-        char('i'),
-        map(parse_integer_numeric_part, |i| Value::Int(i)),
-        char('e'),
-    )(input)?;
-
-    Ok(result)
-}
-
 fn encode_integer(i: i64, buf: &mut BytesMut) {
     use lexical::{FormattedSize, ToLexical};
     let mut digits = [0; usize::FORMATTED_SIZE_DECIMAL];
@@ -98,16 +72,6 @@ fn encode_integer(i: i64, buf: &mut BytesMut) {
     buf.put_u8(b'i');
     buf.put_slice(i.to_lexical(&mut digits));
     buf.put_u8(b'e');
-}
-
-// parses l<value*>e
-#[inline]
-fn parse_list(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
-    delimited(
-        char('l'),
-        map(many0(parse_value), |vs| Value::List(vs)),
-        char('e'),
-    )(input)
 }
 
 #[inline(always)]
@@ -126,30 +90,6 @@ fn encode_list<B: AsRef<[u8]> + Ord>(vs: &Vec<Value<B>>, buf: &mut BytesMut) {
         encode_value(v, buf);
     }
     encode_list_end(buf);
-}
-
-// d<(<str><value>)*>e
-#[inline]
-fn parse_dict(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
-    delimited(
-        char('d'),
-        map(
-            fold_many0(
-                tuple((parse_bytes, parse_value)),
-                || Map::with_capacity(4),
-                |mut acc, (k, v)| {
-                    acc.insert(k, v);
-                    acc
-                },
-            ),
-            |mut ps| {
-                ps.ensure_order();
-
-                Value::Dict(ps)
-            },
-        ),
-        char('e'),
-    )(input)
 }
 
 #[inline(always)]
@@ -171,11 +111,6 @@ fn encode_dict<B: AsRef<[u8]> + Ord>(vs: &Map<B, Value<B>>, buf: &mut BytesMut) 
     encode_dict_end(buf);
 }
 
-#[inline]
-fn parse_value(input: &[u8]) -> IResult<&[u8], Value<&[u8]>> {
-    alt((parse_bytes_value, parse_integer, parse_list, parse_dict))(input)
-}
-
 fn encode_value<B: AsRef<[u8]> + Ord>(value: &Value<B>, buf: &mut BytesMut) {
     match value {
         Value::Bytes(b) => encode_string(&b, buf),
@@ -192,371 +127,239 @@ pub fn encode<B: AsRef<[u8]> + Ord>(value: &Value<B>) -> Vec<u8> {
     buf.to_vec()
 }
 
-pub fn parse(input: &[u8]) -> Result<Value<&[u8]>, ()> {
-    let result = all_consuming(terminated(parse_value, opt(char('\n'))))(input);
-    match result {
-        Ok((_, v)) => Ok(v),
-        e => Err(()),
-    }
-}
-
-pub fn rd_parse(input: &[u8]) -> Result<Value<&[u8]>, ()> {
-    let parser = rd::Parser::new(input);
+pub fn parse(input: &[u8]) -> Result<Elements<&[u8]>, ()> {
+    let parser = Parser::new(input);
     parser.parse().map_err(|_| ())
 }
 
-pub fn rd_eparse(input: &[u8]) -> Result<rd::Elements, ()> {
-    let parser = rd::Parser::new(input);
-    parser.eparse().map_err(|_| ())
+#[derive(Debug, PartialEq, Eq)]
+pub enum Error {
+    UnexpectedEnd(String),
+    ExpectedFar(u8),
+    InvalidInt(Vec<u8>),
+    Trailing,
 }
 
-mod rd {
-    use super::*;
+#[derive(Debug, PartialEq, Eq)]
+pub enum Element<B> {
+    DictBegin(usize),
+    ListBegin(usize),
+    Int(i64),
+    Bytes(B),
+}
 
-    #[derive(Debug, PartialEq, Eq)]
-    pub enum Error {
-        UnexpectedEnd(String),
-        ExpectedFar(u8),
-        InvalidInt(Vec<u8>),
-        Trailing,
+#[derive(Debug, PartialEq, Eq)]
+pub struct Elements<B> {
+    elements: Vec<Element<B>>,
+}
+
+impl<'a, B> IntoIterator for &'a Elements<B> {
+    type Item = &'a Element<B>;
+
+    type IntoIter = <&'a Vec<Element<B>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let b: &Vec<Element<B>> = &self.elements;
+        b.into_iter()
     }
+}
 
-    struct ParseBufs<'a> {
-        list: Vec<Value<&'a [u8]>>,
-        map: Vec<(&'a [u8], Value<&'a [u8]>)>,
-    }
-
-    #[derive(Debug)]
-    pub enum Element<'a> {
-        DictBegin(usize),
-        ListBegin(usize),
-        Int(i64),
-        Bytes(&'a [u8]),
-    }
-
-    #[derive(Debug)]
-    pub struct Elements<'a> {
-        elements: Vec<Element<'a>>,
-    }
-
-    impl<'a> ParseBufs<'a> {
-        fn new() -> Self {
-            Self {
-                list: Vec::with_capacity(10),
-                map: Vec::with_capacity(10),
-            }
-        }
-    }
-
-    pub struct Parser<'a> {
-        input: &'a [u8],
-        bufs: ParseBufs<'a>,
-        elements: Vec<Element<'a>>,
-    }
-
-    impl<'a> Parser<'a> {
-        pub fn new(input: &'a [u8]) -> Self {
-            let bufs = ParseBufs::new();
-            let elements = Vec::with_capacity(10);
-            Self {
-                input,
-                bufs,
-                elements,
-            }
+impl<B: Ord + AsRef<[u8]>> Elements<B> {
+    pub fn into_value(self) -> Value<B> {
+        struct IntoValue<B> {
+            drain: <Vec<Element<B>> as IntoIterator>::IntoIter,
         }
 
-        #[inline(always)]
-        fn is_done(&self) -> bool {
-            self.input.len() == 0
-        }
-
-        #[inline(always)]
-        fn peek(&self) -> Option<u8> {
-            self.input.get(0).copied()
-        }
-
-        #[inline(always)]
-        fn take_until(&mut self, b: u8) -> Result<&'a [u8], Error> {
-            let result = memchr::memchr(b, &self.input);
-            match result {
-                Some(i) => {
-                    let (head, tail) = self.input.split_at(i);
-                    self.input = tail;
-                    Ok(head)
+        impl<B: Ord + AsRef<[u8]>> IntoValue<B> {
+            fn into_value(&mut self) -> Value<B> {
+                match self.drain.next() {
+                    Some(Element::Int(i)) => Value::Int(i),
+                    Some(Element::Bytes(bs)) => Value::Bytes(bs),
+                    Some(Element::ListBegin(ct)) => {
+                        let mut list = Vec::with_capacity(ct);
+                        for _ in 0..ct {
+                            list.push(self.into_value());
+                        }
+                        Value::List(list)
+                    }
+                    Some(Element::DictBegin(ct)) => {
+                        let mut map = Map::with_capacity(ct);
+                        for _ in 0..ct {
+                            let key = self.into_value();
+                            let value = self.into_value();
+                            if let Value::Bytes(b) = key {
+                                map.insert(b, value);
+                            }
+                        }
+                        Value::Dict(map)
+                    }
+                    _ => unreachable!(),
                 }
-                _ => Err(Error::ExpectedFar(b)),
             }
         }
 
-        #[inline(always)]
-        fn take_n(&mut self, n: usize) -> Result<&'a [u8], Error> {
-            let (head, tail) = self.input.split_at(n);
-            if head.len() == n {
+        let mut iv = IntoValue {
+            drain: self.elements.into_iter(),
+        };
+        iv.into_value()
+    }
+}
+
+pub struct Parser<'a> {
+    input: &'a [u8],
+    elements: Vec<Element<&'a [u8]>>,
+}
+
+impl<'a> Parser<'a> {
+    pub fn new(input: &'a [u8]) -> Self {
+        let elements = Vec::with_capacity(10);
+        Self { input, elements }
+    }
+
+    #[inline(always)]
+    fn is_done(&self) -> bool {
+        self.input.len() == 0
+    }
+
+    #[inline(always)]
+    fn peek(&self) -> Option<u8> {
+        self.input.get(0).copied()
+    }
+
+    #[inline(always)]
+    fn take_until(&mut self, b: u8) -> Result<&'a [u8], Error> {
+        let result = memchr::memchr(b, &self.input);
+        match result {
+            Some(i) => {
+                let (head, tail) = self.input.split_at(i);
                 self.input = tail;
                 Ok(head)
-            } else {
-                Err(Error::UnexpectedEnd(format!("take_n: {}", n)))
             }
-        }
-
-        #[inline(always)]
-        fn bump(&mut self) -> Result<u8, Error> {
-            match self.input.split_first() {
-                Some((t, tail)) => {
-                    self.input = tail;
-                    Ok(*t)
-                }
-                _ => Err(Error::UnexpectedEnd("bump".to_string())),
-            }
-        }
-
-        #[inline(always)]
-        fn bump_assert(&mut self) {
-            let result = self.bump();
-            debug_assert!(result.is_ok());
-        }
-
-        #[inline(always)]
-        fn parse_raw_int<T: lexical::FromLexical>(input: &[u8]) -> Result<T, Error> {
-            lexical::parse(input).map_err(|_| Error::InvalidInt(input.to_vec()))
-        }
-
-        fn parse_string(&mut self) -> Result<&'a [u8], Error> {
-            let len = self.take_until(b':')?;
-            self.bump_assert();
-            let len_num = Self::parse_raw_int(len)?;
-            let str = self.take_n(len_num)?;
-
-            Ok(str)
-        }
-
-        fn parse_estring(&mut self) -> Result<(), Error> {
-            let len = self.take_until(b':')?;
-            self.bump_assert();
-            let len_num = Self::parse_raw_int(len)?;
-            let str = self.take_n(len_num)?;
-
-            self.elements.push(Element::Bytes(str));
-
-            Ok(())
-        }
-
-        fn parse_dict(&mut self) -> Result<Value<&'a [u8]>, Error> {
-            self.bump_assert();
-
-            let start_len = self.bufs.map.len();
-            while self.peek() != Some(b'e') {
-                let key = self.parse_string()?;
-                let value = self.parse_value()?;
-                self.bufs.map.push((key, value));
-            }
-
-            self.bump_assert();
-
-            let map = Map::from_raw(self.bufs.map.split_off(start_len));
-
-            Ok(Value::Dict(map))
-        }
-
-        fn parse_edict(&mut self) -> Result<(), Error> {
-            self.bump_assert();
-
-            let header_idx = self.elements.len();
-            self.elements.push(Element::DictBegin(0));
-
-            let mut ct = 0;
-
-            while self.peek() != Some(b'e') {
-                self.parse_estring()?;
-                self.parse_evalue()?;
-                ct += 1;
-            }
-
-            self.bump_assert();
-
-            self.elements[header_idx] = Element::DictBegin(ct);
-
-            Ok(())
-        }
-
-        fn parse_int(&mut self) -> Result<Value<&'a [u8]>, Error> {
-            self.bump_assert();
-
-            let num = self.take_until(b'e')?;
-            // Reject leading -0 and leading 0, but not 0 itself.
-            if num.starts_with(&[b'-', b'0']) || (num.starts_with(&[b'0']) && num.len() != 1) {
-                Err(Error::InvalidInt(num.to_vec()))?;
-            }
-            let num = lexical::parse(&num).unwrap();
-
-            self.bump_assert();
-
-            Ok(Value::Int(num))
-        }
-
-        fn parse_eint(&mut self) -> Result<(), Error> {
-            self.bump_assert();
-
-            let num = self.take_until(b'e')?;
-            // Reject leading -0 and leading 0, but not 0 itself.
-            if num.starts_with(&[b'-', b'0']) || (num.starts_with(&[b'0']) && num.len() != 1) {
-                Err(Error::InvalidInt(num.to_vec()))?;
-            }
-            let num = lexical::parse(&num).unwrap();
-
-            self.bump_assert();
-
-            self.elements.push(Element::Int(num));
-
-            Ok(())
-        }
-
-        fn parse_list(&mut self) -> Result<Value<&'a [u8]>, Error> {
-            self.bump_assert();
-
-            let start_len = self.bufs.list.len();
-            while self.peek() != Some(b'e') {
-                let value = self.parse_value()?;
-                self.bufs.list.push(value);
-            }
-
-            let list = self.bufs.list.split_off(start_len);
-
-            self.bump_assert();
-
-            Ok(Value::List(list))
-        }
-
-        fn parse_elist(&mut self) -> Result<(), Error> {
-            self.bump_assert();
-
-            let header_idx = self.elements.len();
-
-            self.elements.push(Element::ListBegin(0));
-
-            let mut ct = 0;
-
-            while self.peek() != Some(b'e') {
-                self.parse_evalue()?;
-                ct += 1;
-            }
-
-            self.bump_assert();
-
-            self.elements[header_idx] = Element::ListBegin(ct);
-
-            Ok(())
-        }
-
-        fn parse_value(&mut self) -> Result<Value<&'a [u8]>, Error> {
-            match self.peek() {
-                Some(b'd') => self.parse_dict(),
-                Some(b'i') => self.parse_int(),
-                Some(b'l') => self.parse_list(),
-                Some(b'0'..=b'9') => Ok(Value::Bytes(self.parse_string()?)),
-                _ => Err(Error::UnexpectedEnd("parse_value".to_string())),
-            }
-        }
-
-        fn parse_evalue(&mut self) -> Result<(), Error> {
-            match self.peek() {
-                Some(b'd') => self.parse_edict(),
-                Some(b'i') => self.parse_eint(),
-                Some(b'l') => self.parse_elist(),
-                Some(b'0'..=b'9') => self.parse_estring(),
-                _ => Err(Error::UnexpectedEnd("parse_value".to_string())),
-            }
-        }
-
-        pub fn parse(mut self) -> Result<Value<&'a [u8]>, Error> {
-            let value = self.parse_value()?;
-            if self.is_done() {
-                Ok(value)
-            } else {
-                Err(Error::Trailing)
-            }
-        }
-
-        pub fn eparse(mut self) -> Result<Elements<'a>, Error> {
-            self.parse_evalue()?;
-            if self.is_done() {
-                Ok(Elements {
-                    elements: self.elements,
-                })
-            } else {
-                Err(Error::Trailing)
-            }
+            _ => Err(Error::ExpectedFar(b)),
         }
     }
 
-    #[cfg(test)]
-    mod test {
-        use super::*;
+    #[inline(always)]
+    fn take_n(&mut self, n: usize) -> Result<&'a [u8], Error> {
+        let (head, tail) = self.input.split_at(n);
+        if head.len() == n {
+            self.input = tail;
+            Ok(head)
+        } else {
+            Err(Error::UnexpectedEnd(format!("take_n: {}", n)))
+        }
+    }
 
-        #[test]
-        fn parses_string() {
-            let enc = "4:spam".as_bytes();
-            assert_eq!(Value::Bytes("spam".as_bytes()), rd_parse(&enc).unwrap())
+    #[inline(always)]
+    fn bump(&mut self) -> Result<u8, Error> {
+        match self.input.split_first() {
+            Some((t, tail)) => {
+                self.input = tail;
+                Ok(*t)
+            }
+            _ => Err(Error::UnexpectedEnd("bump".to_string())),
+        }
+    }
+
+    #[inline(always)]
+    fn bump_assert(&mut self) {
+        let result = self.bump();
+        debug_assert!(result.is_ok());
+    }
+
+    #[inline(always)]
+    fn parse_raw_int<T: lexical::FromLexical>(input: &[u8]) -> Result<T, Error> {
+        lexical::parse(input).map_err(|_| Error::InvalidInt(input.to_vec()))
+    }
+
+    fn parse_string(&mut self) -> Result<(), Error> {
+        let len = self.take_until(b':')?;
+        self.bump_assert();
+        let len_num = Self::parse_raw_int(len)?;
+        let str = self.take_n(len_num)?;
+
+        self.elements.push(Element::Bytes(str));
+
+        Ok(())
+    }
+
+    fn parse_dict(&mut self) -> Result<(), Error> {
+        self.bump_assert();
+
+        let header_idx = self.elements.len();
+        self.elements.push(Element::DictBegin(0));
+
+        let mut ct = 0;
+
+        while self.peek() != Some(b'e') {
+            self.parse_string()?;
+            self.parse_value()?;
+            ct += 1;
         }
 
-        #[test]
-        fn parses_valid_ints() {
-            assert_eq!(Value::Int(3), rd_parse("i3e".as_bytes()).unwrap());
-            assert_eq!(Value::Int(0), rd_parse("i0e".as_bytes()).unwrap())
+        self.bump_assert();
+
+        self.elements[header_idx] = Element::DictBegin(ct);
+
+        Ok(())
+    }
+
+    fn parse_int(&mut self) -> Result<(), Error> {
+        self.bump_assert();
+
+        let num = self.take_until(b'e')?;
+        // Reject leading -0 and leading 0, but not 0 itself.
+        if num.starts_with(&[b'-', b'0']) || (num.starts_with(&[b'0']) && num.len() != 1) {
+            Err(Error::InvalidInt(num.to_vec()))?;
+        }
+        let num = lexical::parse(&num).unwrap();
+
+        self.bump_assert();
+
+        self.elements.push(Element::Int(num));
+
+        Ok(())
+    }
+
+    fn parse_list(&mut self) -> Result<(), Error> {
+        self.bump_assert();
+
+        let header_idx = self.elements.len();
+
+        self.elements.push(Element::ListBegin(0));
+
+        let mut ct = 0;
+
+        while self.peek() != Some(b'e') {
+            self.parse_value()?;
+            ct += 1;
         }
 
-        #[test]
-        fn rejects_invalid_ints() {
-            assert!(
-                rd_parse("i03e".as_bytes()).is_err(),
-                "leading zeros are invalid"
-            );
-            assert!(
-                rd_parse("i-0e".as_bytes()).is_err(),
-                "negative zero is invalid"
-            );
+        self.bump_assert();
+
+        self.elements[header_idx] = Element::ListBegin(ct);
+
+        Ok(())
+    }
+
+    fn parse_value(&mut self) -> Result<(), Error> {
+        match self.peek() {
+            Some(b'd') => self.parse_dict(),
+            Some(b'i') => self.parse_int(),
+            Some(b'l') => self.parse_list(),
+            Some(b'0'..=b'9') => self.parse_string(),
+            _ => Err(Error::UnexpectedEnd("parse_value".to_string())),
         }
+    }
 
-        #[test]
-        fn parses_lists() {
-            let enc = "l4:spam4:eggse".as_bytes();
-            assert_eq!(
-                Value::List(vec![
-                    Value::Bytes("spam".as_bytes()),
-                    Value::Bytes("eggs".as_bytes())
-                ]),
-                rd_parse(enc).unwrap()
-            )
-        }
-
-        #[test]
-        fn parses_dicts() {
-            assert_eq!(
-                Value::Dict(
-                    vec![
-                        ("cow".as_bytes(), Value::Bytes("moo".as_bytes())),
-                        ("spam".as_bytes(), Value::Bytes("eggs".as_bytes()))
-                    ]
-                    .into_iter()
-                    .collect()
-                ),
-                rd_parse("d3:cow3:moo4:spam4:eggse".as_bytes()).unwrap()
-            );
-
-            assert_eq!(
-                Value::Dict(
-                    vec![(
-                        "spam".as_bytes(),
-                        Value::List(vec![
-                            Value::Bytes("a".as_bytes()),
-                            Value::Bytes("b".as_bytes())
-                        ])
-                    )]
-                    .into_iter()
-                    .collect()
-                ),
-                rd_parse("d4:spaml1:a1:bee".as_bytes()).unwrap()
-            );
+    pub fn parse(mut self) -> Result<Elements<&'a [u8]>, Error> {
+        self.parse_value()?;
+        if self.is_done() {
+            Ok(Elements {
+                elements: self.elements,
+            })
+        } else {
+            Err(Error::Trailing)
         }
     }
 }
@@ -568,13 +371,16 @@ mod test {
     #[test]
     fn parses_string() {
         let enc = "4:spam".as_bytes();
-        assert_eq!(Value::Bytes("spam".as_bytes()), parse(&enc).unwrap())
+        assert_eq!(
+            Value::Bytes("spam".as_bytes()),
+            parse(&enc).unwrap().into_value()
+        )
     }
 
     #[test]
     fn parses_valid_ints() {
-        assert_eq!(Value::Int(3), parse("i3e".as_bytes()).unwrap());
-        assert_eq!(Value::Int(0), parse("i0e".as_bytes()).unwrap())
+        assert_eq!(Value::Int(3), parse("i3e".as_bytes()).unwrap().into_value());
+        assert_eq!(Value::Int(0), parse("i0e".as_bytes()).unwrap().into_value())
     }
 
     #[test]
@@ -597,7 +403,7 @@ mod test {
                 Value::Bytes("spam".as_bytes()),
                 Value::Bytes("eggs".as_bytes())
             ]),
-            parse(enc).unwrap()
+            parse(enc).unwrap().into_value()
         )
     }
 
@@ -612,7 +418,9 @@ mod test {
                 .into_iter()
                 .collect()
             ),
-            parse("d3:cow3:moo4:spam4:eggse".as_bytes()).unwrap()
+            parse("d3:cow3:moo4:spam4:eggse".as_bytes())
+                .unwrap()
+                .into_value()
         );
 
         assert_eq!(
@@ -627,7 +435,48 @@ mod test {
                 .into_iter()
                 .collect()
             ),
-            parse("d4:spaml1:a1:bee".as_bytes()).unwrap()
+            parse("d4:spaml1:a1:bee".as_bytes()).unwrap().into_value()
         );
+    }
+
+    #[test]
+    fn converts_strings_to_value() {
+        let data = "4:spam";
+        let els = parse(data.as_bytes()).unwrap();
+        let value = els.into_value();
+        assert_eq!(Value::Bytes("spam".as_bytes()), value);
+    }
+
+    #[test]
+    fn converts_ints_to_value() {
+        let data = "i127e";
+        let els = parse(data.as_bytes()).unwrap();
+        let value = els.into_value();
+        assert_eq!(Value::Int(127), value);
+    }
+
+    #[test]
+    fn converts_lists_to_value() {
+        let data = "l4:spami127ee";
+        let els = parse(data.as_bytes()).unwrap();
+        let value = els.into_value();
+        assert_eq!(
+            Value::List(vec![Value::Bytes("spam".as_bytes()), Value::Int(127)]),
+            value
+        );
+    }
+
+    #[test]
+    fn converts_dicts_to_value() {
+        let data = "d6:valuesl4:spami127ee3:key5:valuee";
+        let els = parse(data.as_bytes()).unwrap();
+        let value = els.into_value();
+        let mut dict = Map::new();
+        dict.insert(
+            "values".as_bytes(),
+            Value::List(vec![Value::Bytes("spam".as_bytes()), Value::Int(127)]),
+        );
+        dict.insert("key".as_bytes(), Value::Bytes("value".as_bytes()));
+        assert_eq!(Value::Dict(dict), value);
     }
 }

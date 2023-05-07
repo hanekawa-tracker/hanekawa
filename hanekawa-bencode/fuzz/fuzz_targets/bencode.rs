@@ -4,7 +4,10 @@ use libfuzzer_sys::fuzz_target;
 use hanekawa_bencode::{Value, parse, encode};
 
 fuzz_target!(|input: Value<&[u8]>| {
-    let expected = Ok(input.clone());
+    let expected = Ok(input.clone().into_elements());
     let encoded = encode(&input);
-    assert_eq!(expected, parse(&encoded));
+    let parsed_val = parse(&encoded);
+    assert_eq!(expected, parsed_val);
 });
+
+

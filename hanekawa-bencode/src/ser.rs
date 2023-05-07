@@ -1,3 +1,7 @@
+use crate::{Element, Elements};
+
+use std::cell::RefCell;
+
 use super::{
     encode_dict_begin, encode_dict_end, encode_integer, encode_list_begin, encode_list_end,
     encode_string, Value,
@@ -404,6 +408,60 @@ impl<B: AsRef<[u8]> + Ord> serde::Serialize for Value<B> {
                 s.end()
             }
         }
+    }
+}
+
+struct IterWrap<I>(RefCell<I>);
+
+impl<'i, B: AsRef<[u8]> + Ord + 'i, I: Iterator<Item = &'i Element<B>>> serde::Serialize
+    for IterWrap<I>
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let next = { self.0.borrow_mut().next() };
+        match next {
+            Some(Element::Bytes(b)) => serializer.serialize_bytes(b.as_ref()),
+            Some(Element::Int(i)) => serializer.serialize_i64(*i),
+            Some(Element::ListBegin(ct)) => {
+                use serde::ser::SerializeSeq;
+
+                let mut s = serializer.serialize_seq(Some(*ct))?;
+                for _ in 0..*ct {
+                    s.serialize_element(self)?
+                }
+                s.end()
+            }
+            Some(Element::DictBegin(ct)) => {
+                use serde::ser::SerializeMap;
+                use serde_bytes::Bytes;
+
+                let mut s = serializer.serialize_map(Some(*ct))?;
+                for _ in 0..*ct {
+                    let next = { self.0.borrow_mut().next() };
+                    if let Some(Element::Bytes(k)) = next {
+                        s.serialize_key(&Bytes::new(k.as_ref()))?;
+                        s.serialize_value(self)?;
+                    }
+                }
+                s.end()
+            }
+            _ => serializer.serialize_none(),
+        }
+    }
+}
+
+impl<B: AsRef<[u8]> + Ord> serde::Serialize for Elements<B> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let iter = self.into_iter();
+        let mut wrap = IterWrap(RefCell::new(iter));
+        let wrap = &mut wrap;
+
+        wrap.serialize(serializer)
     }
 }
 

@@ -1,3 +1,4 @@
+#[cfg_attr(feature = "fuzz", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Map<K, V> {
     entries: Vec<(K, V)>,
