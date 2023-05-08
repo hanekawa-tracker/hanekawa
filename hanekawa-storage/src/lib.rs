@@ -1,4 +1,4 @@
-use hanekawa_common::types::{Event, Peer};
+use hanekawa_common::types::{Event, Peer, PeerScrapeData};
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::types::ipnetwork::IpNetwork;
@@ -15,6 +15,10 @@ pub struct UpdatePeerAnnounceCommand {
     pub left: u64,
     pub event: Option<Event>,
     pub last_update_ts: OffsetDateTime,
+}
+
+pub struct ScrapeQuery {
+    pub info_hashes: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -68,7 +72,7 @@ ON CONFLICT (info_hash, peer_id) DO UPDATE
             cmd.downloaded as i64,
             cmd.left as i64,
             "started",
-            sqlx::types::time::OffsetDateTime::now_utc()
+            OffsetDateTime::now_utc()
         )
         .execute(&self.pool)
         .await
@@ -93,5 +97,37 @@ WHERE info_hash = $1 AND ip <> $2
         .unwrap();
 
         peers
+    }
+
+    pub async fn scrape(&self, cmd: &ScrapeQuery) -> Vec<(String, PeerScrapeData)> {
+        // TODO: active peer distinction for 'downloading'
+        let result = sqlx::query!(
+            "
+SELECT
+  info_hash,
+  COUNT(*) FILTER (WHERE remaining = 0) AS complete,
+  COUNT(*) FILTER (WHERE remaining <> 0) AS incomplete
+FROM
+  peer_announces
+WHERE info_hash = ANY($1)
+GROUP BY info_hash
+",
+            &cmd.info_hashes
+        )
+        .map(|r| {
+            (
+                r.info_hash,
+                PeerScrapeData {
+                    complete: r.complete.unwrap_or(0) as u32,
+                    downloaded: r.complete.unwrap_or(0) as u32,
+                    incomplete: r.incomplete.unwrap_or(0) as u32,
+                },
+            )
+        })
+        .fetch_all(&self.pool)
+        .await
+        .unwrap();
+
+        result
     }
 }

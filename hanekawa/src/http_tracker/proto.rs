@@ -1,4 +1,4 @@
-use hanekawa_common::types::{Event, Peer};
+use hanekawa_common::types::{Event, Peer, PeerScrapeData};
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -33,13 +33,6 @@ pub struct AnnounceResponse {
 #[derive(Debug, serde::Deserialize)]
 pub struct ScrapeRequest {
     pub info_hash: Vec<String>,
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct PeerScrapeData {
-    pub complete: u32,
-    pub downloaded: u32,
-    pub incomplete: u32,
 }
 
 #[derive(Debug, serde::Serialize)]

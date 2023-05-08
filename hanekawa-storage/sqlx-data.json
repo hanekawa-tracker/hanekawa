@@ -20,6 +20,38 @@
     },
     "query": "\nINSERT INTO peer_announces(\n  info_hash,\n  peer_id,\n  ip,\n  port,\n  uploaded,\n  downloaded,\n  remaining,\n  event,\n  last_update_ts\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\nON CONFLICT (info_hash, peer_id) DO UPDATE\n  SET\n    ip = $3,\n    port = $4,\n    uploaded = $5,\n    downloaded = $6,\n    remaining = $7,\n    event = $8,\n    last_update_ts = $9;\n"
   },
+  "1742a5c13677ee38e720979640dde7a26440d0a7061fe6611e804d6998ce9855": {
+    "describe": {
+      "columns": [
+        {
+          "name": "info_hash",
+          "ordinal": 0,
+          "type_info": "Bpchar"
+        },
+        {
+          "name": "complete",
+          "ordinal": 1,
+          "type_info": "Int8"
+        },
+        {
+          "name": "incomplete",
+          "ordinal": 2,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [
+        false,
+        null,
+        null
+      ],
+      "parameters": {
+        "Left": [
+          "BpcharArray"
+        ]
+      }
+    },
+    "query": "\nSELECT\n  info_hash,\n  COUNT(*) FILTER (WHERE remaining = 0) AS complete,\n  COUNT(*) FILTER (WHERE remaining <> 0) AS incomplete\nFROM\n  peer_announces\nWHERE info_hash = ANY($1)\nGROUP BY info_hash\n"
+  },
   "30e2dad8a2f72621e6e0a955d9b240e07834ce7934728441923cb36310b03e8a": {
     "describe": {
       "columns": [

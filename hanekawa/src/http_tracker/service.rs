@@ -1,19 +1,9 @@
-use super::proto::{
-    AnnounceRequest, AnnounceResponse, PeerData, PeerScrapeData, ScrapeRequest, ScrapeResponse,
-};
+use super::proto::{AnnounceRequest, AnnounceResponse, PeerData, ScrapeRequest, ScrapeResponse};
 
-use hanekawa_common::types::{Event, Peer};
-use hanekawa_storage::{PeerRepository, UpdatePeerAnnounceCommand};
+use hanekawa_common::types::{Peer, PeerScrapeData};
+use hanekawa_storage::{PeerRepository, ScrapeQuery, UpdatePeerAnnounceCommand};
 
 use std::net::IpAddr;
-
-#[derive(Debug)]
-struct InfoHashData {
-    peer_id: String,
-    complete: u32,
-    downloaded: u32,
-    incomplete: u32,
-}
 
 #[derive(Clone)]
 pub struct HttpTrackerService {
@@ -50,22 +40,14 @@ impl HttpTrackerService {
         }
     }
 
-    pub async fn scrape(&self, _request: ScrapeRequest) -> ScrapeResponse {
-        let datas: Vec<InfoHashData> = vec![];
+    pub async fn scrape(&self, request: ScrapeRequest) -> ScrapeResponse {
+        let cmd = ScrapeQuery {
+            info_hashes: request.info_hash,
+        };
 
-        let files = datas
-            .into_iter()
-            .map(|data| {
-                (
-                    data.peer_id,
-                    PeerScrapeData {
-                        complete: data.complete,
-                        downloaded: data.downloaded,
-                        incomplete: data.incomplete,
-                    },
-                )
-            })
-            .collect();
+        let datas = self.repository.scrape(&cmd).await;
+
+        let files = datas.into_iter().collect();
 
         ScrapeResponse { files }
     }

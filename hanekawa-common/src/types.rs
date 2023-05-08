@@ -15,3 +15,10 @@ pub struct Peer {
     pub ip: IpAddr,
     pub port: u16,
 }
+
+#[derive(Debug, serde::Serialize)]
+pub struct PeerScrapeData {
+    pub complete: u32,
+    pub downloaded: u32,
+    pub incomplete: u32,
+}
