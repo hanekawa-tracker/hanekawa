@@ -29,8 +29,11 @@ async fn scrape(
     Bencode(response)
 }
 
-pub fn tracker<S>() -> Router<S> {
-    let tracker = HttpTrackerService {};
+pub async fn tracker<S>() -> Router<S> {
+    let repo = hanekawa_storage::PeerRepository::new(&std::env::var("DATABASE_URL").unwrap())
+        .await
+        .unwrap();
+    let tracker = HttpTrackerService::new(repo).await;
 
     Router::new()
         .route("/announce", get(announce))

@@ -1,4 +1,4 @@
-use crate::types::Event;
+use hanekawa_common::types::{Event, Peer};
 
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -7,20 +7,13 @@ use std::net::IpAddr;
 pub struct AnnounceRequest {
     pub info_hash: String,
     pub peer_id: String,
-    pub ip: Option<String>,
-    pub port: u16,
-    pub uploaded: usize,
-    pub left: usize,
-    pub event: Option<Event>,
-    pub compact: Option<u8>,
-}
-
-#[derive(serde::Serialize, Debug, PartialEq)]
-pub struct Peer {
-    #[serde(rename = "peer id")]
-    pub peer_id: String,
     pub ip: IpAddr,
     pub port: u16,
+    pub uploaded: u64,
+    pub downloaded: u64,
+    pub left: u64,
+    pub event: Option<Event>,
+    pub compact: Option<u8>,
 }
 
 #[derive(serde::Serialize, Debug, PartialEq)]

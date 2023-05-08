@@ -2,7 +2,9 @@
 members = [
   "hanekawa",
   "hanekawa-bencode",
+  "hanekawa-common",
   "hanekawa-server",
+  "hanekawa-storage",
   "hanekawa-udp",
 ]
 

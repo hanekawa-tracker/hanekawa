@@ -1,7 +1,9 @@
 use super::proto::{
-    AnnounceRequest, AnnounceResponse, Peer, PeerData, PeerScrapeData, ScrapeRequest,
-    ScrapeResponse,
+    AnnounceRequest, AnnounceResponse, PeerData, PeerScrapeData, ScrapeRequest, ScrapeResponse,
 };
+
+use hanekawa_common::types::{Event, Peer};
+use hanekawa_storage::{PeerRepository, UpdatePeerAnnounceCommand};
 
 use std::net::IpAddr;
 
@@ -14,11 +16,29 @@ struct InfoHashData {
 }
 
 #[derive(Clone)]
-pub struct HttpTrackerService();
+pub struct HttpTrackerService {
+    repository: PeerRepository,
+}
 
 impl HttpTrackerService {
+    pub async fn new(repository: PeerRepository) -> Self {
+        Self { repository }
+    }
+
     pub async fn announce(&self, announce: AnnounceRequest) -> AnnounceResponse {
-        let peers: Vec<Peer> = vec![];
+        let cmd = UpdatePeerAnnounceCommand {
+            info_hash: announce.info_hash,
+            peer_id: announce.peer_id,
+            ip: announce.ip,
+            port: announce.port,
+            uploaded: announce.uploaded,
+            downloaded: announce.downloaded,
+            left: announce.left,
+            event: announce.event,
+            last_update_ts: time::OffsetDateTime::now_utc(),
+        };
+
+        let peers = self.repository.update_peer_announce(&cmd).await;
 
         let is_compact = announce.compact.unwrap_or(1) == 1;
         let (peers, peers6) = encode_peers(peers, is_compact);

@@ -1,7 +1,7 @@
 mod extensions;
 
-use hanekawa::types::Event;
 use hanekawa::udp_tracker::proto::*;
+use hanekawa_common::types::Event;
 
 use extensions::parse_extensions;
 
@@ -193,5 +193,100 @@ pub fn encode_response(response: &Response, buf: &mut BytesMut) {
         Announce(r) => encode_announce_response(r, buf),
         Scrape(r) => encode_scrape_response(r, buf),
         Error(r) => encode_error_response(r, buf),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn parses_connection_request() {
+        let mut buf = BytesMut::new();
+
+        buf.put_u64(PROTOCOL_ID);
+        buf.put_i32(0);
+        buf.put_i32(42);
+
+        assert_eq!(
+            Ok((&[] as &[u8], ConnectRequest { transaction_id: 42 })),
+            parse_connect_request(&buf)
+        )
+    }
+
+    #[test]
+    fn parses_announce_request() {
+        let mut buf = BytesMut::new();
+
+        let peer_id = "12345678901234567890";
+        let info_hash = "09876543210987654321";
+
+        buf.put_i64(42);
+        buf.put_i32(1);
+        buf.put_i32(32);
+        buf.put_slice(info_hash.as_bytes());
+        buf.put_slice(peer_id.as_bytes());
+        buf.put_i64(3);
+        buf.put_i64(4);
+        buf.put_i64(5);
+        buf.put_i32(3);
+        buf.put_i32(0);
+        buf.put_i32(17);
+        buf.put_i32(-1);
+        buf.put_i16(3001);
+
+        assert_eq!(
+            Ok((
+                &[] as &[u8],
+                AnnounceRequest {
+                    connection_id: 42,
+                    transaction_id: 32,
+                    info_hash: info_hash.to_string(),
+                    peer_id: peer_id.to_string(),
+                    downloaded: 3,
+                    left: 4,
+                    uploaded: 5,
+                    event: Some(Event::Stopped),
+                    ip_address: None,
+                    key: 17,
+                    num_want: None,
+                    port: 3001,
+                    extensions: Vec::new()
+                }
+            )),
+            parse_announce_request(&buf)
+        )
+    }
+
+    #[test]
+    fn parses_scrape_request() {
+        let mut buf = BytesMut::new();
+
+        let info_hash = "01234567890123456789".to_string();
+        let num_hashes = 6;
+
+        let mut hashes = Vec::new();
+        for _ in 0..num_hashes {
+            hashes.push(info_hash.clone());
+        }
+
+        buf.put_i64(42);
+        buf.put_i32(2);
+        buf.put_i32(32);
+        for _ in 0..num_hashes {
+            buf.put_slice(info_hash.as_bytes())
+        }
+
+        assert_eq!(
+            Ok((
+                &[] as &[u8],
+                ScrapeRequest {
+                    connection_id: 42,
+                    transaction_id: 32,
+                    info_hashes: hashes
+                }
+            )),
+            parse_scrape_request(&buf)
+        )
     }
 }

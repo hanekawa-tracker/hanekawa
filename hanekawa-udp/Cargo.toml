@@ -9,5 +9,6 @@ license.workspace = true
 
 [dependencies]
 hanekawa = { path = "../hanekawa" }
+hanekawa-common = { path = "../hanekawa-common" }
 bytes = "1"
 nom = "7"

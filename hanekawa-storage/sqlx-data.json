@@ -1,0 +1,56 @@
+{
+  "db": "PostgreSQL",
+  "027f4cde707af44c599236b57fbb49cd6efe0677c8fb844cf4506ef44a99d559": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Bpchar",
+          "Bpchar",
+          "Inet",
+          "Int4",
+          "Int8",
+          "Int8",
+          "Int8",
+          "Text",
+          "Timestamptz"
+        ]
+      }
+    },
+    "query": "\nINSERT INTO peer_announces(\n  info_hash,\n  peer_id,\n  ip,\n  port,\n  uploaded,\n  downloaded,\n  remaining,\n  event,\n  last_update_ts\n)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\nON CONFLICT (info_hash, peer_id) DO UPDATE\n  SET\n    ip = $3,\n    port = $4,\n    uploaded = $5,\n    downloaded = $6,\n    remaining = $7,\n    event = $8,\n    last_update_ts = $9;\n"
+  },
+  "30e2dad8a2f72621e6e0a955d9b240e07834ce7934728441923cb36310b03e8a": {
+    "describe": {
+      "columns": [
+        {
+          "name": "peer_id",
+          "ordinal": 0,
+          "type_info": "Bpchar"
+        },
+        {
+          "name": "ip",
+          "ordinal": 1,
+          "type_info": "Inet"
+        },
+        {
+          "name": "port",
+          "ordinal": 2,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Bpchar",
+          "Inet"
+        ]
+      }
+    },
+    "query": "\nSELECT peer_id, ip, port\nFROM peer_announces\nWHERE info_hash = $1 AND ip <> $2\n"
+  }
+}

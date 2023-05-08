@@ -1,5 +1,5 @@
 pub use super::extensions::Extension;
-use crate::types::Event;
+use hanekawa_common::types::Event;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ConnectRequest {

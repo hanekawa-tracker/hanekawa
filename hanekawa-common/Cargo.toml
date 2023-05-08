@@ -1,5 +1,5 @@
 [package]
-name = "hanekawa"
+name = "hanekawa-common"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,10 +7,6 @@ homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 
+
 [dependencies]
-hanekawa-common = { path = "../hanekawa-common" }
-hanekawa-storage = { path = "../hanekawa-storage" }
-bytes = "1"
 serde = { version = "1", features = ["derive"] }
-serde_bytes = "0"
-time = "0"

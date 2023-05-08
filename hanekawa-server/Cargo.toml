@@ -11,9 +11,11 @@ license.workspace = true
 hanekawa = { path = "../hanekawa" }
 hanekawa-bencode = { path = "../hanekawa-bencode" }
 hanekawa-udp = { path = "../hanekawa-udp" }
+hanekawa-storage = { path = "../hanekawa-storage" }
 axum = "0"
 axum-extra = { version = "0", features = ["query"] }
 bytes = "1"
+dotenvy = "0"
 futures = "0.3"
 serde = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
