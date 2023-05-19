@@ -11,6 +11,7 @@ use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::Router;
 use axum_extra::extract::Query as MultiQuery;
+use hanekawa_common::Config;
 
 async fn announce(
     Query(announce): Query<AnnounceRequest>,
@@ -29,10 +30,9 @@ async fn scrape(
     Bencode(response)
 }
 
-pub async fn tracker<S>() -> Router<S> {
-    let repo = hanekawa_storage::PeerRepository::new(&std::env::var("DATABASE_URL").unwrap())
-        .await
-        .unwrap();
+pub async fn tracker<S>(cfg: &Config) -> Router<S> {
+    let repo = hanekawa_storage::PeerRepository::new(cfg).await.unwrap();
+
     let tracker = HttpTrackerService::new(repo).await;
 
     Router::new()

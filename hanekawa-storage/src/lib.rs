@@ -1,4 +1,7 @@
-use hanekawa_common::types::{Event, Peer, PeerScrapeData};
+use hanekawa_common::{
+    types::{Event, Peer, PeerScrapeData},
+    Config,
+};
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::types::ipnetwork::IpNetwork;
@@ -24,17 +27,20 @@ pub struct ScrapeQuery {
 #[derive(Clone)]
 pub struct PeerRepository {
     pool: PgPool,
+    _cfg: Config,
 }
 
 impl PeerRepository {
-    pub async fn new(database_url: &str) -> Option<Self> {
+    pub async fn new(cfg: &Config) -> Option<Self> {
         let pool = PgPoolOptions::new()
             .max_connections(80)
-            .connect(database_url)
+            .connect(&cfg.database_url)
             .await
             .ok()?;
 
-        Some(Self { pool })
+        let _cfg = cfg.clone();
+
+        Some(Self { pool, _cfg })
     }
 
     pub async fn update_peer_announce(&self, cmd: &UpdatePeerAnnounceCommand) -> Vec<Peer> {

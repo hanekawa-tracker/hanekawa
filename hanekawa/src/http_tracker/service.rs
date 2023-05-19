@@ -1,6 +1,6 @@
 use super::proto::{AnnounceRequest, AnnounceResponse, PeerData, ScrapeRequest, ScrapeResponse};
 
-use hanekawa_common::types::{Peer, PeerScrapeData};
+use hanekawa_common::types::Peer;
 use hanekawa_storage::{PeerRepository, ScrapeQuery, UpdatePeerAnnounceCommand};
 
 use std::net::IpAddr;
