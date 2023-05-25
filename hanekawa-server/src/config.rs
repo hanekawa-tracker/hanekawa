@@ -41,8 +41,17 @@ pub fn load_config() -> Config {
         num
     };
 
+    let bind_ip = get_string("bind_ip").parse().expect("invalid bind_ip");
+
     Config {
         database_url: get_string("database_url"),
+        bind_ip,
+        http_bind_port: get_u32("http_bind_port")
+            .try_into()
+            .expect("invalid http_bind_port"),
+        udp_bind_port: get_u32("udp_bind_port")
+            .try_into()
+            .expect("invalid udp_bind_port"),
         peer_announce_interval: get_u32("peer_announce_interval"),
         peer_activity_timeout: get_u32("peer_activity_timeout"),
     }

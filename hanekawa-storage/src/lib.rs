@@ -27,7 +27,7 @@ pub struct ScrapeQuery {
 #[derive(Clone)]
 pub struct PeerRepository {
     pool: PgPool,
-    _cfg: Config,
+    cfg: Config,
 }
 
 impl PeerRepository {
@@ -38,9 +38,9 @@ impl PeerRepository {
             .await
             .ok()?;
 
-        let _cfg = cfg.clone();
+        let cfg = cfg.clone();
 
-        Some(Self { pool, _cfg })
+        Some(Self { pool, cfg })
     }
 
     pub async fn update_peer_announce(&self, cmd: &UpdatePeerAnnounceCommand) -> Vec<Peer> {
@@ -84,14 +84,20 @@ ON CONFLICT (info_hash, peer_id) DO UPDATE
         .await
         .unwrap();
 
+        let active_peer_window_start = OffsetDateTime::now_utc()
+            - std::time::Duration::from_secs(self.cfg.peer_activity_timeout as u64);
+
         let peers = sqlx::query!(
             "
 SELECT peer_id, ip, port
 FROM peer_announces
-WHERE info_hash = $1 AND ip <> $2
+WHERE
+  info_hash = $1 AND ip <> $2
+  AND last_update_ts > $3
 ",
             &cmd.info_hash,
             &inet,
+            active_peer_window_start
         )
         .map(|r| Peer {
             peer_id: r.peer_id,

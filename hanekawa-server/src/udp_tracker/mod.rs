@@ -1,13 +1,16 @@
 mod codec;
 
 use codec::UdpTrackerCodec;
+use hanekawa_common::Config;
 
-pub async fn start() {
+pub async fn start(cfg: &Config) {
     use futures::StreamExt;
     use tokio::net::UdpSocket;
     use tokio_util::udp::UdpFramed;
 
-    let socket = UdpSocket::bind("0.0.0.0:8002").await.unwrap();
+    let socket = UdpSocket::bind((cfg.bind_ip, cfg.udp_bind_port))
+        .await
+        .unwrap();
     let mut socket = UdpFramed::new(socket, UdpTrackerCodec {});
 
     while let Some(request) = socket.next().await {

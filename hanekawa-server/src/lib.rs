@@ -11,23 +11,24 @@ async fn start_http(cfg: Config) {
     let tracker = tracker(&cfg).await;
     let app = Router::new().nest("/", tracker);
 
-    axum::Server::bind(&([127, 0, 0, 1], 8001).into())
+    axum::Server::bind(&(cfg.bind_ip, cfg.http_bind_port).into())
         .serve(app.into_make_service())
         .await
         .unwrap();
 }
 
-async fn start_udp() {
-    udp_tracker::start().await;
+async fn start_udp(cfg: Config) {
+    udp_tracker::start(&cfg).await;
 }
 
 pub async fn start() {
     let _ = dotenvy::dotenv();
+    tracing_subscriber::fmt::init();
 
     let cfg = crate::config::load_config();
 
     let hh = tokio::spawn(start_http(cfg.clone()));
-    let uh = tokio::spawn(start_udp());
+    let uh = tokio::spawn(start_udp(cfg.clone()));
 
     let _ = tokio::join!(hh, uh);
 }
