@@ -15,11 +15,11 @@ impl HttpTrackerService {
         Self { repository }
     }
 
-    pub async fn announce(&self, announce: AnnounceRequest) -> AnnounceResponse {
+    pub async fn announce(&self, announce: AnnounceRequest, sender_ip: IpAddr) -> AnnounceResponse {
         let cmd = UpdatePeerAnnounceCommand {
             info_hash: announce.info_hash,
             peer_id: announce.peer_id,
-            ip: announce.ip,
+            ip: sender_ip,
             port: announce.port,
             uploaded: announce.uploaded,
             downloaded: announce.downloaded,

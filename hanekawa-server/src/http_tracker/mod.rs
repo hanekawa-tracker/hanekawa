@@ -7,7 +7,7 @@ use hanekawa::http_tracker::proto::{
 };
 use hanekawa::http_tracker::HttpTrackerService;
 
-use axum::extract::{Query, State};
+use axum::extract::{Query, State, ConnectInfo};
 use axum::routing::get;
 use axum::Router;
 use axum_extra::extract::Query as MultiQuery;
@@ -16,8 +16,10 @@ use hanekawa_common::Config;
 async fn announce(
     Query(announce): Query<AnnounceRequest>,
     State(tracker): State<HttpTrackerService>,
+    ConnectInfo(info): ConnectInfo<std::net::SocketAddr>
 ) -> Bencode<AnnounceResponse> {
-    let response = tracker.announce(announce).await;
+    // TODO: extract true source IP from potential proxies.
+    let response = tracker.announce(announce, info.ip()).await;
     Bencode(response)
 }
 

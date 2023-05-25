@@ -1,13 +1,11 @@
 use hanekawa_common::types::{Event, Peer, PeerScrapeData};
 
 use std::collections::HashMap;
-use std::net::IpAddr;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct AnnounceRequest {
     pub info_hash: String,
     pub peer_id: String,
-    pub ip: IpAddr,
     pub port: u16,
     pub uploaded: u64,
     pub downloaded: u64,

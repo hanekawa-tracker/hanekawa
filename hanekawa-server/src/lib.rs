@@ -12,7 +12,7 @@ async fn start_http(cfg: Config) {
     let app = Router::new().nest("/", tracker);
 
     axum::Server::bind(&(cfg.bind_ip, cfg.http_bind_port).into())
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
         .await
         .unwrap();
 }
