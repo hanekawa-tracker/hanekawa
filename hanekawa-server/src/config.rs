@@ -41,6 +41,11 @@ pub fn load_config() -> Config {
         num
     };
 
+    let get_bool = |key: &str| {
+        let b = get_or_panic(key, cfg.get_bool(key));
+        b
+    };
+
     let bind_ip = get_string("bind_ip").parse().expect("invalid bind_ip");
 
     Config {
@@ -54,5 +59,6 @@ pub fn load_config() -> Config {
             .expect("invalid udp_bind_port"),
         peer_announce_interval: get_u32("peer_announce_interval"),
         peer_activity_timeout: get_u32("peer_activity_timeout"),
+        only_allowed_info_hashes: get_bool("only_allowed_info_hashes"),
     }
 }

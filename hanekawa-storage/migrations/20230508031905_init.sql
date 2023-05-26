@@ -1,7 +1,6 @@
--- Add migration script here
 CREATE TABLE peer_announces(
-       info_hash character(20) NOT NULL,
-       peer_id character(20) NOT NULL,
+       info_hash bytea NOT NULL,
+       peer_id bytea NOT NULL,
        ip inet NOT NULL,
        port integer NOT NULL,
        uploaded bigint NOT NULL,

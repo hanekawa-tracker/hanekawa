@@ -1,21 +1,51 @@
 use super::proto::{AnnounceRequest, AnnounceResponse, PeerData, ScrapeRequest, ScrapeResponse};
 
-use hanekawa_common::types::Peer;
-use hanekawa_storage::{PeerRepository, ScrapeQuery, UpdatePeerAnnounceCommand};
+use hanekawa_common::{
+    types::{InfoHashStatus, Peer},
+    Config,
+};
+use hanekawa_storage::{
+    info_hash::{InfoHashRepository, InfoHashSummaryQuery},
+    peer::{PeerRepository, ScrapeQuery, UpdatePeerAnnounceCommand},
+};
 
 use std::net::IpAddr;
 
 #[derive(Clone)]
 pub struct HttpTrackerService {
-    repository: PeerRepository,
+    config: Config,
+    peer_repository: PeerRepository,
+    info_hash_repository: InfoHashRepository,
 }
 
 impl HttpTrackerService {
-    pub async fn new(repository: PeerRepository) -> Self {
-        Self { repository }
+    pub async fn new(
+        config: &Config,
+        peer_repository: PeerRepository,
+        info_hash_repository: InfoHashRepository,
+    ) -> Self {
+        Self {
+            config: config.clone(),
+            peer_repository,
+            info_hash_repository,
+        }
     }
 
     pub async fn announce(&self, announce: AnnounceRequest, sender_ip: IpAddr) -> AnnounceResponse {
+        let info_hash_summary = self
+            .info_hash_repository
+            .get_summary(InfoHashSummaryQuery {
+                info_hash: &announce.info_hash,
+            })
+            .await;
+
+        if info_hash_summary.status == InfoHashStatus::ExplicitDeny
+            || (self.config.only_allowed_info_hashes
+                && info_hash_summary.status != InfoHashStatus::ExplicitAllow)
+        {
+            unimplemented!("denied info_hash");
+        }
+
         let cmd = UpdatePeerAnnounceCommand {
             info_hash: announce.info_hash,
             peer_id: announce.peer_id,
@@ -28,13 +58,13 @@ impl HttpTrackerService {
             last_update_ts: time::OffsetDateTime::now_utc(),
         };
 
-        let peers = self.repository.update_peer_announce(&cmd).await;
+        let peers = self.peer_repository.update_peer_announce(&cmd).await;
 
         let is_compact = announce.compact.unwrap_or(1) == 1;
         let (peers, peers6) = encode_peers(peers, is_compact);
 
         AnnounceResponse {
-            interval: 60,
+            interval: self.config.peer_announce_interval,
             peers,
             peers6,
         }
@@ -45,7 +75,7 @@ impl HttpTrackerService {
             info_hashes: request.info_hash,
         };
 
-        let datas = self.repository.scrape(&cmd).await;
+        let datas = self.peer_repository.scrape(&cmd).await;
 
         let files = datas.into_iter().collect();
 
@@ -88,12 +118,14 @@ fn encode_peers(peers: Vec<Peer>, is_compact: bool) -> (PeerData, PeerData) {
 
 #[cfg(test)]
 mod test {
+    use hanekawa_common::types::PeerId;
+
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
 
     fn ipv4_peer() -> Peer {
         Peer {
-            peer_id: "012345678901234567890".to_string(),
+            peer_id: PeerId("012345678901234567890".as_bytes().to_vec()),
             ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             port: 5005,
         }
@@ -101,7 +133,7 @@ mod test {
 
     fn ipv6_peer() -> Peer {
         Peer {
-            peer_id: "09876543210987654321".to_string(),
+            peer_id: PeerId("09876543210987654321".as_bytes().to_vec()),
             ip: IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
             port: 5005,
         }

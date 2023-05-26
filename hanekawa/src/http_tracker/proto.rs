@@ -1,11 +1,11 @@
-use hanekawa_common::types::{Event, Peer, PeerScrapeData};
+use hanekawa_common::types::{Event, InfoHash, Peer, PeerId, PeerScrapeData};
 
 use std::collections::HashMap;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct AnnounceRequest {
-    pub info_hash: String,
-    pub peer_id: String,
+    pub info_hash: InfoHash,
+    pub peer_id: PeerId,
     pub port: u16,
     pub uploaded: u64,
     pub downloaded: u64,
@@ -30,10 +30,10 @@ pub struct AnnounceResponse {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct ScrapeRequest {
-    pub info_hash: Vec<String>,
+    pub info_hash: Vec<InfoHash>,
 }
 
 #[derive(Debug, serde::Serialize)]
 pub struct ScrapeResponse {
-    pub files: HashMap<String, PeerScrapeData>,
+    pub files: HashMap<InfoHash, PeerScrapeData>,
 }

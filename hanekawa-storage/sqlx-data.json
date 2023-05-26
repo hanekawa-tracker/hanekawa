@@ -6,8 +6,8 @@
       "nullable": [],
       "parameters": {
         "Left": [
-          "Bpchar",
-          "Bpchar",
+          "Bytea",
+          "Bytea",
           "Inet",
           "Int4",
           "Int8",
@@ -26,7 +26,7 @@
         {
           "name": "info_hash",
           "ordinal": 0,
-          "type_info": "Bpchar"
+          "type_info": "Bytea"
         },
         {
           "name": "complete",
@@ -46,19 +46,45 @@
       ],
       "parameters": {
         "Left": [
-          "BpcharArray"
+          "ByteaArray"
         ]
       }
     },
     "query": "\nSELECT\n  info_hash,\n  COUNT(*) FILTER (WHERE remaining = 0) AS complete,\n  COUNT(*) FILTER (WHERE remaining <> 0) AS incomplete\nFROM\n  peer_announces\nWHERE info_hash = ANY($1)\nGROUP BY info_hash\n"
   },
-  "30e2dad8a2f72621e6e0a955d9b240e07834ce7934728441923cb36310b03e8a": {
+  "562f104b52ba2f436adfbbe5f5b2e5a784d727930591a36dc8f52ab1f589e7bc": {
+    "describe": {
+      "columns": [
+        {
+          "name": "info_hash",
+          "ordinal": 0,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "is_allowed",
+          "ordinal": 1,
+          "type_info": "Bool"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Bytea"
+        ]
+      }
+    },
+    "query": "\nSELECT info_hash, is_allowed FROM info_hashes\nWHERE info_hash = $1\n"
+  },
+  "be47349b03df4e8a060cb4c1895994e6302f2c2140de10358338b85db5e853dd": {
     "describe": {
       "columns": [
         {
           "name": "peer_id",
           "ordinal": 0,
-          "type_info": "Bpchar"
+          "type_info": "Bytea"
         },
         {
           "name": "ip",
@@ -78,11 +104,12 @@
       ],
       "parameters": {
         "Left": [
-          "Bpchar",
-          "Inet"
+          "Bytea",
+          "Inet",
+          "Timestamptz"
         ]
       }
     },
-    "query": "\nSELECT peer_id, ip, port\nFROM peer_announces\nWHERE info_hash = $1 AND ip <> $2\n"
+    "query": "\nSELECT peer_id, ip, port\nFROM peer_announces\nWHERE\n  info_hash = $1 AND ip <> $2\n  AND last_update_ts > $3\n"
   }
 }

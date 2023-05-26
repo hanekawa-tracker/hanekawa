@@ -10,4 +10,5 @@ pub struct Config {
     pub udp_bind_port: u16,
     pub peer_announce_interval: u32,
     pub peer_activity_timeout: u32,
+    pub only_allowed_info_hashes: bool,
 }
