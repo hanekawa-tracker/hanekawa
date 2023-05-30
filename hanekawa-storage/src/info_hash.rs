@@ -21,7 +21,8 @@ impl InfoHashRepository {
     pub async fn get_summary(&self, cmd: InfoHashSummaryQuery<'_>) -> InfoHashSummary {
         let result = sqlx::query!(
             "
-SELECT info_hash, is_allowed FROM info_hashes
+SELECT info_hash, is_allowed
+FROM info_hashes
 WHERE info_hash = $1
 ",
             &cmd.info_hash.0

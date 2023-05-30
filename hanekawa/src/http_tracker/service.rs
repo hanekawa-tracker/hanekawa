@@ -43,6 +43,8 @@ impl HttpTrackerService {
             || (self.config.only_allowed_info_hashes
                 && info_hash_summary.status != InfoHashStatus::ExplicitAllow)
         {
+            let st = info_hash_summary.info_hash.to_hex();
+            dbg!(st);
             unimplemented!("denied info_hash");
         }
 

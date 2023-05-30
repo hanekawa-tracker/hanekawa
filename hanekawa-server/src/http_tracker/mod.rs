@@ -1,16 +1,17 @@
 mod encode;
+mod extractor;
 
 use encode::Bencode;
+use extractor::Query;
 
 use hanekawa::http_tracker::proto::{
     AnnounceRequest, AnnounceResponse, ScrapeRequest, ScrapeResponse,
 };
 use hanekawa::http_tracker::HttpTrackerService;
 
-use axum::extract::{ConnectInfo, Query, State};
+use axum::extract::{ConnectInfo, State};
 use axum::routing::get;
 use axum::Router;
-use axum_extra::extract::Query as MultiQuery;
 use hanekawa_common::Config;
 
 async fn announce(
@@ -25,7 +26,7 @@ async fn announce(
 
 // BEP 48: Tracker Protocol Extension: Scrape
 async fn scrape(
-    MultiQuery(scrape): MultiQuery<ScrapeRequest>,
+    Query(scrape): Query<ScrapeRequest>,
     State(tracker): State<HttpTrackerService>,
 ) -> Bencode<ScrapeResponse> {
     let response = tracker.scrape(scrape).await;

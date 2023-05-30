@@ -8,6 +8,12 @@ pub struct PeerId(#[serde(with = "serde_bytes")] pub Vec<u8>);
 #[serde(transparent)]
 pub struct InfoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
+impl InfoHash {
+    pub fn to_hex(&self) -> String {
+        hex::encode(&self.0)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Event {

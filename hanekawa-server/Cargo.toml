@@ -11,10 +11,11 @@ license.workspace = true
 hanekawa = { path = "../hanekawa" }
 hanekawa-bencode = { path = "../hanekawa-bencode" }
 hanekawa-common = { path = "../hanekawa-common" }
+hanekawa-percent-encode = { path = "../hanekawa-percent-encode" }
 hanekawa-udp = { path = "../hanekawa-udp" }
 hanekawa-storage = { path = "../hanekawa-storage" }
 axum = "0"
-axum-extra = { version = "0", features = ["query"] }
+async-trait = "0"
 bytes = "1"
 config = { version = "0", default-features = false, features = ["toml"] }
 dotenvy = "0"

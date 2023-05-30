@@ -9,5 +9,7 @@ license.workspace = true
 
 
 [dependencies]
+hex = "0"
+percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0"
