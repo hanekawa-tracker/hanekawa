@@ -45,7 +45,8 @@ impl<'a> Parts<'a> {
         let mut map = HashMap::new();
 
         let parts = query_string.split('&').map(|param| {
-            let (key, value) = param.split_once('=')
+            let (key, value) = param
+                .split_once('=')
                 .ok_or(Error::custom("missing parameter value"))?;
             let key = percent_encoding::percent_decode_str(key).decode_utf8_lossy();
             let value: Cow<'_, [u8]> = percent_encoding::percent_decode_str(value).into();
@@ -345,7 +346,9 @@ impl<'de> serde::de::EnumAccess<'de> for EnumAccess {
     }
 }
 
-pub fn from_query_string<'q, T: serde::Deserialize<'q>>(query_string: &'q str) -> Result<T, value::Error> {
+pub fn from_query_string<'q, T: serde::Deserialize<'q>>(
+    query_string: &'q str,
+) -> Result<T, value::Error> {
     let parts = Parts::from_query_string(query_string)?;
     let deserializer = Deserializer::new(parts);
     T::deserialize(deserializer)
@@ -388,7 +391,7 @@ mod test {
         #[derive(Debug, serde::Deserialize, PartialEq)]
         struct Query {
             #[serde(with = "serde_bytes")]
-            value: Vec<u8>
+            value: Vec<u8>,
         }
 
         let query: Query = from_query_string("value=%26c%1d%91!");
@@ -396,13 +399,7 @@ mod test {
         assert_eq!(
             query,
             Query {
-                value: vec![
-                    b'\x26',
-                    b'c',
-                    b'\x1d',
-                    b'\x91',
-                    b'!'
-                ]
+                value: vec![b'\x26', b'c', b'\x1d', b'\x91', b'!']
             }
         )
     }
