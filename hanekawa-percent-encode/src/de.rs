@@ -39,17 +39,21 @@ impl<'a> Value<'a> {
 struct Parts<'a>(Vec<(Cow<'a, str>, Value<'a>)>);
 
 impl<'a> Parts<'a> {
-    fn from_query_string(query_string: &'a str) -> Self {
+    fn from_query_string(query_string: &'a str) -> Result<Self, value::Error> {
         use std::collections::HashMap;
 
         let mut map = HashMap::new();
 
         let parts = query_string.split('&').map(|param| {
-            let (key, value) = param.split_once('=').unwrap();
+            let (key, value) = param.split_once('=')
+                .ok_or(Error::custom("missing parameter value"))?;
             let key = percent_encoding::percent_decode_str(key).decode_utf8_lossy();
             let value: Cow<'_, [u8]> = percent_encoding::percent_decode_str(value).into();
-            (key, value)
+            Ok((key, value))
         });
+
+        // Propagate first error if any
+        let parts: Vec<_> = parts.collect::<Result<_, _>>()?;
 
         for (key, value) in parts.into_iter() {
             use std::collections::hash_map::Entry;
@@ -73,7 +77,7 @@ impl<'a> Parts<'a> {
             };
         }
 
-        Self(map.into_iter().collect())
+        Ok(Self(map.into_iter().collect()))
     }
 }
 
@@ -341,10 +345,10 @@ impl<'de> serde::de::EnumAccess<'de> for EnumAccess {
     }
 }
 
-pub fn from_query_string<'q, T: serde::Deserialize<'q>>(query_string: &'q str) -> T {
-    let parts = Parts::from_query_string(query_string);
+pub fn from_query_string<'q, T: serde::Deserialize<'q>>(query_string: &'q str) -> Result<T, value::Error> {
+    let parts = Parts::from_query_string(query_string)?;
     let deserializer = Deserializer::new(parts);
-    T::deserialize(deserializer).unwrap()
+    T::deserialize(deserializer)
 }
 
 #[cfg(test)]
