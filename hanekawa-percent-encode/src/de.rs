@@ -210,6 +210,14 @@ impl<'de> serde::de::Deserializer<'de> for Value<'de> {
         visitor.visit_bytes(&bs)
     }
 
+    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: serde::de::Visitor<'de>,
+    {
+        let bs = self.bytes();
+        visitor.visit_bytes(&bs)
+    }
+
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: serde::de::Visitor<'de>,
@@ -258,7 +266,6 @@ impl<'de> serde::de::Deserializer<'de> for Value<'de> {
         str
         string
         unit
-        byte_buf
         unit_struct
         tuple_struct
         struct
@@ -368,6 +375,30 @@ mod test {
                 serial_number: vec![b'\0', b' ', b'4', b'2'],
                 pet_names: vec!["jim".to_string(), "tom".to_string()],
                 is_alive: true
+            }
+        )
+    }
+
+    #[test]
+    fn deserializes_non_unicode() {
+        #[derive(Debug, serde::Deserialize, PartialEq)]
+        struct Query {
+            #[serde(with = "serde_bytes")]
+            value: Vec<u8>
+        }
+
+        let query: Query = from_query_string("value=%26c%1d%91!");
+
+        assert_eq!(
+            query,
+            Query {
+                value: vec![
+                    b'\x26',
+                    b'c',
+                    b'\x1d',
+                    b'\x91',
+                    b'!'
+                ]
             }
         )
     }
