@@ -1,0 +1,15 @@
+[package]
+name = "hanekawa-percent-encode"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = "1"
+percent-encoding = "2"
+
+[dev-dependencies]
+serde_bytes = "0"

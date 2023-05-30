@@ -8,6 +8,7 @@ hanekawa doesn't know everything, she just knows what she knows.
 
 - High performance, comprehensively tested, and round-trip fuzzed `bencode` parser and encoder
 - Serde serializer for `bencode` structures
+- Serde deserializer for percent-encoded structures with Unicode OR binary values
 - Benchmark suite for `bencode` parser and encoder
 - Implements several tracker-related [BEPs](https://www.bittorrent.org/beps/bep_0000.html)
 - Supports both HTTP and UDP tracking

@@ -3,6 +3,7 @@ members = [
   "hanekawa",
   "hanekawa-bencode",
   "hanekawa-common",
+  "hanekawa-percent-encode",
   "hanekawa-server",
   "hanekawa-storage",
   "hanekawa-udp",
