@@ -1,5 +1,5 @@
 use hanekawa_common::repository::{
-    info_hash::{GetInfoHashSummary, InfoHashRepository as Repository},
+    info_hash::{GetInfoHashSummary, InfoHashRepository as Repository, UpdateInfoHash},
     Error,
 };
 use hanekawa_common::types::{InfoHashStatus, InfoHashSummary};
@@ -47,5 +47,38 @@ WHERE info_hash = $1
             info_hash: cmd.info_hash.clone(),
             status: InfoHashStatus::Unknown,
         }))
+    }
+
+    async fn update_info_hash(&self, cmd: UpdateInfoHash<'_>) -> Result<(), Error> {
+        if let InfoHashStatus::Unknown = cmd.status {
+            sqlx::query!(
+                "
+DELETE FROM info_hashes
+WHERE info_hash = $1
+",
+                &cmd.info_hash.0
+            )
+            .execute(&self.pool)
+            .await
+            .unwrap();
+        } else {
+            let is_allowed = cmd.status == InfoHashStatus::ExplicitAllow;
+
+            sqlx::query!(
+                "
+INSERT INTO info_hashes(info_hash, is_allowed)
+VALUES($1, $2)
+ON CONFLICT (info_hash) DO UPDATE
+SET is_allowed = $2
+",
+                &cmd.info_hash.0,
+                is_allowed
+            )
+            .execute(&self.pool)
+            .await
+            .unwrap();
+        }
+
+        Ok(())
     }
 }
