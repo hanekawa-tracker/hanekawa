@@ -1,8 +1,5 @@
-mod encode;
-mod extractor;
-
-use encode::Bencode;
-use extractor::Query;
+use super::http::encode::Bencode;
+use super::http::extractor::Query;
 
 use hanekawa::http_tracker::proto::{
     AnnounceRequest, AnnounceResponse, ScrapeRequest, ScrapeResponse,
@@ -38,7 +35,7 @@ pub async fn tracker<S>(cfg: &Config) -> Router<S> {
 
     let pr = std::sync::Arc::new(storage.peer);
     let ir = std::sync::Arc::new(storage.info_hash);
-    let tracker = HttpTrackerService::new(cfg, pr, ir).await;
+    let tracker = HttpTrackerService::new(cfg, pr, ir);
 
     Router::new()
         .route("/announce", get(announce))

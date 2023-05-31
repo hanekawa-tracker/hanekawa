@@ -1,4 +1,5 @@
 mod config;
+mod http;
 mod http_tracker;
 mod udp_tracker;
 
