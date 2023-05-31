@@ -1,5 +1,8 @@
 use hanekawa_common::{
-    repository::{Error, peer::{GetPeers, UpdatePeerAnnounce, PeerRepository as Repository, GetPeerStatistics}},
+    repository::{
+        peer::{GetPeerStatistics, GetPeers, PeerRepository as Repository, UpdatePeerAnnounce},
+        Error,
+    },
     types::{InfoHash, Peer, PeerId, PeerStatistics},
     Config,
 };
@@ -54,13 +57,13 @@ ON CONFLICT (info_hash, peer_id) DO UPDATE
             "started",
             OffsetDateTime::now_utc()
         )
-            .execute(&self.pool)
-            .await
-            .unwrap();
+        .execute(&self.pool)
+        .await
+        .unwrap();
 
         Ok(())
     }
-    
+
     async fn get_peers(&self, cmd: GetPeers<'_>) -> Result<Vec<Peer>, Error> {
         let active_peer_window_start = OffsetDateTime::now_utc()
             - std::time::Duration::from_secs(self.cfg.peer_activity_timeout as u64);
@@ -76,19 +79,22 @@ WHERE
             &cmd.info_hash.0,
             active_peer_window_start
         )
-            .map(|r| Peer {
-                peer_id: PeerId(r.peer_id),
-                ip: r.ip.ip(),
-                port: r.port as u16,
-            })
-            .fetch_all(&self.pool)
-            .await
-            .unwrap();
+        .map(|r| Peer {
+            peer_id: PeerId(r.peer_id),
+            ip: r.ip.ip(),
+            port: r.port as u16,
+        })
+        .fetch_all(&self.pool)
+        .await
+        .unwrap();
 
         Ok(peers)
     }
 
-    async fn get_peer_statistics(&self, cmd: GetPeerStatistics<'_>) -> Result<HashMap<InfoHash, PeerStatistics>, Error> {
+    async fn get_peer_statistics(
+        &self,
+        cmd: GetPeerStatistics<'_>,
+    ) -> Result<HashMap<InfoHash, PeerStatistics>, Error> {
         let ih_bs: Vec<Vec<u8>> = cmd.info_hashes.iter().cloned().map(|ih| ih.0).collect();
 
         let result = sqlx::query!(
@@ -104,19 +110,19 @@ GROUP BY info_hash
 ",
             &ih_bs
         )
-            .map(|r| {
-                (
+        .map(|r| {
+            (
                 InfoHash(r.info_hash),
                 PeerStatistics {
                     complete: r.complete.unwrap_or(0) as u32,
                     downloaded: r.complete.unwrap_or(0) as u32,
                     incomplete: r.incomplete.unwrap_or(0) as u32,
                 },
-                )
-            })
-            .fetch_all(&self.pool)
-            .await
-            .unwrap();
+            )
+        })
+        .fetch_all(&self.pool)
+        .await
+        .unwrap();
 
         Ok(result.into_iter().collect())
     }

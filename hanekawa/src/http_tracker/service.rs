@@ -1,8 +1,11 @@
 use super::proto::{AnnounceRequest, AnnounceResponse, PeerData, ScrapeRequest, ScrapeResponse};
 
 use hanekawa_common::{
+    repository::{
+        info_hash::{GetInfoHashSummary, InfoHashRepository},
+        peer::{GetPeerStatistics, GetPeers, PeerRepository, UpdatePeerAnnounce},
+    },
     types::{InfoHashStatus, Peer},
-    repository::{info_hash::{GetInfoHashSummary, InfoHashRepository}, peer::{PeerRepository, UpdatePeerAnnounce, GetPeers, GetPeerStatistics}},
     Config,
 };
 
@@ -59,23 +62,24 @@ impl HttpTrackerService {
             update_timestamp: time::OffsetDateTime::now_utc(),
         };
 
-        self.peer_repository.update_peer_announce(cmd)
+        self.peer_repository
+            .update_peer_announce(cmd)
             .await
             .unwrap();
 
-        let active_after = time::OffsetDateTime::now_utc() - std::time::Duration::from_secs(self.config.peer_activity_timeout as u64);
+        let active_after = time::OffsetDateTime::now_utc()
+            - std::time::Duration::from_secs(self.config.peer_activity_timeout as u64);
 
-        let peers = self.peer_repository.get_peers(GetPeers {
-            info_hash: &announce.info_hash,
-            active_after: Some(active_after)
-        })
+        let peers = self
+            .peer_repository
+            .get_peers(GetPeers {
+                info_hash: &announce.info_hash,
+                active_after: Some(active_after),
+            })
             .await
             .unwrap();
 
-        let peers = peers
-            .into_iter()
-            .filter(|p| p.ip != sender_ip)
-            .collect();
+        let peers = peers.into_iter().filter(|p| p.ip != sender_ip).collect();
 
         let is_compact = announce.compact.unwrap_or(1) == 1;
         let (peers, peers6) = encode_peers(peers, is_compact);
@@ -92,9 +96,7 @@ impl HttpTrackerService {
             info_hashes: &request.info_hash,
         };
 
-        let files = self.peer_repository.get_peer_statistics(cmd)
-            .await
-            .unwrap();
+        let files = self.peer_repository.get_peer_statistics(cmd).await.unwrap();
 
         ScrapeResponse { files }
     }

@@ -1,6 +1,5 @@
-pub mod peer;
 pub mod info_hash;
+pub mod peer;
 
 #[derive(Debug)]
-pub enum Error {
-}
+pub enum Error {}
