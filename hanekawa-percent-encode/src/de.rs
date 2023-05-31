@@ -372,7 +372,7 @@ mod test {
 
         let qs = "name=humanoid&age=1000&serial_number=%00%2042&pet_names=jim&is_alive=true&pet_names=tom";
 
-        let value: Person = from_query_string(qs);
+        let value: Person = from_query_string(qs).unwrap();
 
         assert_eq!(
             value,
@@ -394,7 +394,7 @@ mod test {
             value: Vec<u8>,
         }
 
-        let query: Query = from_query_string("value=%26c%1d%91!");
+        let query: Query = from_query_string("value=%26c%1d%91!").unwrap();
 
         assert_eq!(
             query,

@@ -2,27 +2,25 @@ use super::proto::{AnnounceRequest, AnnounceResponse, PeerData, ScrapeRequest, S
 
 use hanekawa_common::{
     types::{InfoHashStatus, Peer},
+    repository::{info_hash::{GetInfoHashSummary, InfoHashRepository}, peer::{PeerRepository, UpdatePeerAnnounce, GetPeers, GetPeerStatistics}},
     Config,
-};
-use hanekawa_storage::{
-    info_hash::{InfoHashRepository, InfoHashSummaryQuery},
-    peer::{PeerRepository, ScrapeQuery, UpdatePeerAnnounceCommand},
 };
 
 use std::net::IpAddr;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct HttpTrackerService {
     config: Config,
-    peer_repository: PeerRepository,
-    info_hash_repository: InfoHashRepository,
+    peer_repository: Arc<dyn PeerRepository>,
+    info_hash_repository: Arc<dyn InfoHashRepository>,
 }
 
 impl HttpTrackerService {
     pub async fn new(
         config: &Config,
-        peer_repository: PeerRepository,
-        info_hash_repository: InfoHashRepository,
+        peer_repository: Arc<dyn PeerRepository>,
+        info_hash_repository: Arc<dyn InfoHashRepository>,
     ) -> Self {
         Self {
             config: config.clone(),
@@ -34,10 +32,11 @@ impl HttpTrackerService {
     pub async fn announce(&self, announce: AnnounceRequest, sender_ip: IpAddr) -> AnnounceResponse {
         let info_hash_summary = self
             .info_hash_repository
-            .get_summary(InfoHashSummaryQuery {
+            .get_info_hash_summary(GetInfoHashSummary {
                 info_hash: &announce.info_hash,
             })
-            .await;
+            .await
+            .unwrap();
 
         if info_hash_summary.status == InfoHashStatus::ExplicitDeny
             || (self.config.only_allowed_info_hashes
@@ -48,19 +47,35 @@ impl HttpTrackerService {
             unimplemented!("denied info_hash");
         }
 
-        let cmd = UpdatePeerAnnounceCommand {
-            info_hash: announce.info_hash,
-            peer_id: announce.peer_id,
+        let cmd = UpdatePeerAnnounce {
+            info_hash: &announce.info_hash,
+            peer_id: &announce.peer_id,
             ip: sender_ip,
             port: announce.port,
             uploaded: announce.uploaded,
             downloaded: announce.downloaded,
             left: announce.left,
             event: announce.event,
-            last_update_ts: time::OffsetDateTime::now_utc(),
+            update_timestamp: time::OffsetDateTime::now_utc(),
         };
 
-        let peers = self.peer_repository.update_peer_announce(&cmd).await;
+        self.peer_repository.update_peer_announce(cmd)
+            .await
+            .unwrap();
+
+        let active_after = time::OffsetDateTime::now_utc() - std::time::Duration::from_secs(self.config.peer_activity_timeout as u64);
+
+        let peers = self.peer_repository.get_peers(GetPeers {
+            info_hash: &announce.info_hash,
+            active_after: Some(active_after)
+        })
+            .await
+            .unwrap();
+
+        let peers = peers
+            .into_iter()
+            .filter(|p| p.ip != sender_ip)
+            .collect();
 
         let is_compact = announce.compact.unwrap_or(1) == 1;
         let (peers, peers6) = encode_peers(peers, is_compact);
@@ -73,13 +88,13 @@ impl HttpTrackerService {
     }
 
     pub async fn scrape(&self, request: ScrapeRequest) -> ScrapeResponse {
-        let cmd = ScrapeQuery {
-            info_hashes: request.info_hash,
+        let cmd = GetPeerStatistics {
+            info_hashes: &request.info_hash,
         };
 
-        let datas = self.peer_repository.scrape(&cmd).await;
-
-        let files = datas.into_iter().collect();
+        let files = self.peer_repository.get_peer_statistics(cmd)
+            .await
+            .unwrap();
 
         ScrapeResponse { files }
     }

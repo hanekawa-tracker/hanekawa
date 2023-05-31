@@ -1,4 +1,5 @@
 pub mod types;
+pub mod repository;
 
 use std::net::Ipv4Addr;
 

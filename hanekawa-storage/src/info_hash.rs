@@ -1,4 +1,5 @@
-use hanekawa_common::types::{InfoHash, InfoHashStatus, InfoHashSummary};
+use hanekawa_common::types::{InfoHashStatus, InfoHashSummary};
+use hanekawa_common::repository::{Error, info_hash::{InfoHashRepository as Repository, GetInfoHashSummary}};
 
 use sqlx::postgres::PgPool;
 
@@ -13,12 +14,9 @@ impl InfoHashRepository {
     }
 }
 
-pub struct InfoHashSummaryQuery<'a> {
-    pub info_hash: &'a InfoHash,
-}
-
-impl InfoHashRepository {
-    pub async fn get_summary(&self, cmd: InfoHashSummaryQuery<'_>) -> InfoHashSummary {
+#[async_trait::async_trait]
+impl Repository for InfoHashRepository {
+    async fn get_info_hash_summary(&self, cmd: GetInfoHashSummary<'_>) -> Result<InfoHashSummary, Error> {
         let result = sqlx::query!(
             "
 SELECT info_hash, is_allowed
@@ -27,21 +25,21 @@ WHERE info_hash = $1
 ",
             &cmd.info_hash.0
         )
-        .map(|r| InfoHashSummary {
-            info_hash: cmd.info_hash.clone(),
-            status: if r.is_allowed {
-                InfoHashStatus::ExplicitAllow
-            } else {
-                InfoHashStatus::ExplicitDeny
-            },
-        })
-        .fetch_optional(&self.pool)
-        .await
-        .unwrap();
+            .map(|r| InfoHashSummary {
+                info_hash: cmd.info_hash.clone(),
+                status: if r.is_allowed {
+                    InfoHashStatus::ExplicitAllow
+                } else {
+                    InfoHashStatus::ExplicitDeny
+                },
+            })
+            .fetch_optional(&self.pool)
+            .await
+            .unwrap();
 
-        result.unwrap_or(InfoHashSummary {
+        Ok(result.unwrap_or(InfoHashSummary {
             info_hash: cmd.info_hash.clone(),
             status: InfoHashStatus::Unknown,
-        })
+        }))
     }
 }

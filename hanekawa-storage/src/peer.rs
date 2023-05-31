@@ -1,28 +1,13 @@
 use hanekawa_common::{
-    types::{Event, InfoHash, Peer, PeerId, PeerScrapeData},
+    repository::{Error, peer::{GetPeers, UpdatePeerAnnounce, PeerRepository as Repository, GetPeerStatistics}},
+    types::{InfoHash, Peer, PeerId, PeerStatistics},
     Config,
 };
 
 use sqlx::postgres::PgPool;
 use sqlx::types::ipnetwork::IpNetwork;
 use sqlx::types::time::OffsetDateTime;
-use std::net::IpAddr;
-
-pub struct UpdatePeerAnnounceCommand {
-    pub info_hash: InfoHash,
-    pub peer_id: PeerId,
-    pub ip: IpAddr,
-    pub port: u16,
-    pub uploaded: u64,
-    pub downloaded: u64,
-    pub left: u64,
-    pub event: Option<Event>,
-    pub last_update_ts: OffsetDateTime,
-}
-
-pub struct ScrapeQuery {
-    pub info_hashes: Vec<InfoHash>,
-}
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct PeerRepository {
@@ -30,13 +15,9 @@ pub struct PeerRepository {
     cfg: Config,
 }
 
-impl PeerRepository {
-    pub(super) fn new(pool: PgPool, cfg: &Config) -> Self {
-        let cfg = cfg.clone();
-        Self { pool, cfg }
-    }
-
-    pub async fn update_peer_announce(&self, cmd: &UpdatePeerAnnounceCommand) -> Vec<Peer> {
+#[async_trait::async_trait]
+impl Repository for PeerRepository {
+    async fn update_peer_announce(&self, cmd: UpdatePeerAnnounce<'_>) -> Result<(), Error> {
         let inet: IpNetwork = cmd.ip.clone().into();
 
         sqlx::query!(
@@ -73,10 +54,14 @@ ON CONFLICT (info_hash, peer_id) DO UPDATE
             "started",
             OffsetDateTime::now_utc()
         )
-        .execute(&self.pool)
-        .await
-        .unwrap();
+            .execute(&self.pool)
+            .await
+            .unwrap();
 
+        Ok(())
+    }
+    
+    async fn get_peers(&self, cmd: GetPeers<'_>) -> Result<Vec<Peer>, Error> {
         let active_peer_window_start = OffsetDateTime::now_utc()
             - std::time::Duration::from_secs(self.cfg.peer_activity_timeout as u64);
 
@@ -85,27 +70,25 @@ ON CONFLICT (info_hash, peer_id) DO UPDATE
 SELECT peer_id, ip, port
 FROM peer_announces
 WHERE
-  info_hash = $1 AND ip <> $2
-  AND last_update_ts > $3
+  info_hash = $1
+  AND last_update_ts > $2
 ",
             &cmd.info_hash.0,
-            &inet,
             active_peer_window_start
         )
-        .map(|r| Peer {
-            peer_id: PeerId(r.peer_id),
-            ip: r.ip.ip(),
-            port: r.port as u16,
-        })
-        .fetch_all(&self.pool)
-        .await
-        .unwrap();
+            .map(|r| Peer {
+                peer_id: PeerId(r.peer_id),
+                ip: r.ip.ip(),
+                port: r.port as u16,
+            })
+            .fetch_all(&self.pool)
+            .await
+            .unwrap();
 
-        peers
+        Ok(peers)
     }
 
-    pub async fn scrape(&self, cmd: &ScrapeQuery) -> Vec<(InfoHash, PeerScrapeData)> {
-        // TODO: active peer distinction for 'downloading'
+    async fn get_peer_statistics(&self, cmd: GetPeerStatistics<'_>) -> Result<HashMap<InfoHash, PeerStatistics>, Error> {
         let ih_bs: Vec<Vec<u8>> = cmd.info_hashes.iter().cloned().map(|ih| ih.0).collect();
 
         let result = sqlx::query!(
@@ -121,20 +104,27 @@ GROUP BY info_hash
 ",
             &ih_bs
         )
-        .map(|r| {
-            (
+            .map(|r| {
+                (
                 InfoHash(r.info_hash),
-                PeerScrapeData {
+                PeerStatistics {
                     complete: r.complete.unwrap_or(0) as u32,
                     downloaded: r.complete.unwrap_or(0) as u32,
                     incomplete: r.incomplete.unwrap_or(0) as u32,
                 },
-            )
-        })
-        .fetch_all(&self.pool)
-        .await
-        .unwrap();
+                )
+            })
+            .fetch_all(&self.pool)
+            .await
+            .unwrap();
 
-        result
+        Ok(result.into_iter().collect())
+    }
+}
+
+impl PeerRepository {
+    pub(super) fn new(pool: PgPool, cfg: &Config) -> Self {
+        let cfg = cfg.clone();
+        Self { pool, cfg }
     }
 }

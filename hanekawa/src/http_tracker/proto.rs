@@ -1,4 +1,4 @@
-use hanekawa_common::types::{Event, InfoHash, Peer, PeerId, PeerScrapeData};
+use hanekawa_common::types::{Event, InfoHash, Peer, PeerId, PeerStatistics};
 
 use std::collections::HashMap;
 
@@ -35,5 +35,5 @@ pub struct ScrapeRequest {
 
 #[derive(Debug, serde::Serialize)]
 pub struct ScrapeResponse {
-    pub files: HashMap<InfoHash, PeerScrapeData>,
+    pub files: HashMap<InfoHash, PeerStatistics>,
 }

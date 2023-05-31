@@ -31,7 +31,7 @@ pub struct Peer {
 }
 
 #[derive(Debug, serde::Serialize)]
-pub struct PeerScrapeData {
+pub struct PeerStatistics {
     pub complete: u32,
     pub downloaded: u32,
     pub incomplete: u32,
