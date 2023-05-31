@@ -9,6 +9,11 @@ pub struct PeerId(#[serde(with = "serde_bytes")] pub Vec<u8>);
 pub struct InfoHash(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 impl InfoHash {
+    pub fn from_hex(s: impl AsRef<str>) -> Self {
+        let bytes = hex::decode(s.as_ref()).unwrap();
+        Self(bytes)
+    }
+
     pub fn to_hex(&self) -> String {
         hex::encode(&self.0)
     }
@@ -47,7 +52,7 @@ pub struct PeerStatistics {
     pub incomplete: u32,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InfoHashStatus {
     Unknown,
     ExplicitAllow,
