@@ -20,7 +20,7 @@ pub struct HttpTrackerService {
 }
 
 impl HttpTrackerService {
-    pub async fn new(
+    pub fn new(
         config: &Config,
         peer_repository: Arc<dyn PeerRepository>,
         info_hash_repository: Arc<dyn InfoHashRepository>,
