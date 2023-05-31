@@ -12,4 +12,5 @@ pub struct Config {
     pub peer_announce_interval: u32,
     pub peer_activity_timeout: u32,
     pub only_allowed_info_hashes: bool,
+    pub enable_admin_api: bool,
 }

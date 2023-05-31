@@ -60,5 +60,6 @@ pub fn load_config() -> Config {
         peer_announce_interval: get_u32("peer_announce_interval"),
         peer_activity_timeout: get_u32("peer_activity_timeout"),
         only_allowed_info_hashes: get_bool("only_allowed_info_hashes"),
+        enable_admin_api: get_bool("enable_admin_api"),
     }
 }
