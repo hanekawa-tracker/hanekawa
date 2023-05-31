@@ -1,3 +1,4 @@
+mod admin;
 mod config;
 mod http;
 mod http_tracker;
@@ -10,7 +11,9 @@ use axum::Router;
 
 async fn start_http(cfg: Config) {
     let tracker = tracker(&cfg).await;
-    let app = Router::new().nest("/", tracker);
+    let admin = admin::admin(&cfg).await;
+
+    let app = Router::new().nest("/", tracker).nest("/admin", admin);
 
     axum::Server::bind(&(cfg.bind_ip, cfg.http_bind_port).into())
         .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
