@@ -54,7 +54,7 @@ ON CONFLICT (info_hash, peer_id) DO UPDATE
             cmd.uploaded as i64,
             cmd.downloaded as i64,
             cmd.left as i64,
-            "started",
+            cmd.event.map(|e| e.to_string()),
             OffsetDateTime::now_utc()
         )
         .execute(&self.pool)

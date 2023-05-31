@@ -22,6 +22,16 @@ pub enum Event {
     Stopped,
 }
 
+impl ToString for Event {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Started => "started".to_string(),
+            Self::Completed => "completed".to_string(),
+            Self::Stopped => "stopped".to_string(),
+        }
+    }
+}
+
 #[derive(serde::Serialize, Debug, PartialEq)]
 pub struct Peer {
     #[serde(rename = "peer id")]
