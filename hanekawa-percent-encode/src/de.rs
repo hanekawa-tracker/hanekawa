@@ -227,11 +227,15 @@ impl<'de> serde::de::Deserializer<'de> for Value<'de> {
     where
         V: serde::de::Visitor<'de>,
     {
-        if let Value::Multi(vs) = self {
-            let sd = SeqDeserializer::new(vs.into_iter().map(|v| Value::Bytes(v)));
-            visitor.visit_seq(sd)
-        } else {
-            Err(Error::custom("expected sequence"))
+        match self {
+            Value::Bytes(_) => {
+                let sd = SeqDeserializer::new(vec![self].into_iter());
+                visitor.visit_seq(sd)
+            }
+            Value::Multi(vs) => {
+                let sd = SeqDeserializer::new(vs.into_iter().map(|v| Value::Bytes(v)));
+                visitor.visit_seq(sd)
+            }
         }
     }
 
@@ -400,6 +404,23 @@ mod test {
             query,
             Query {
                 value: vec![b'\x26', b'c', b'\x1d', b'\x91', b'!']
+            }
+        )
+    }
+
+    #[test]
+    fn treats_single_params_as_seqs_if_requested() {
+        #[derive(Debug, serde::Deserialize, PartialEq)]
+        struct Query {
+            many: Vec<String>,
+        }
+
+        let query: Query = from_query_string("many=once").unwrap();
+
+        assert_eq!(
+            query,
+            Query {
+                many: vec!["once".to_string()]
             }
         )
     }
