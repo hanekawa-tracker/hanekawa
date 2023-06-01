@@ -25,6 +25,13 @@ pub enum Event {
     Started,
     Completed,
     Stopped,
+    Interval,
+}
+
+impl Default for Event {
+    fn default() -> Self {
+        Self::Interval
+    }
 }
 
 impl ToString for Event {
@@ -33,6 +40,7 @@ impl ToString for Event {
             Self::Started => "started".to_string(),
             Self::Completed => "completed".to_string(),
             Self::Stopped => "stopped".to_string(),
+            Self::Interval => "interval".to_string(),
         }
     }
 }

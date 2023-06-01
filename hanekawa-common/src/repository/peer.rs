@@ -15,7 +15,7 @@ pub struct UpdatePeerAnnounce<'a> {
     pub uploaded: u64,
     pub downloaded: u64,
     pub left: u64,
-    pub event: Option<Event>,
+    pub event: Event,
     pub update_timestamp: OffsetDateTime,
 }
 

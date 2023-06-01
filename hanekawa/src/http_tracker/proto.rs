@@ -10,7 +10,8 @@ pub struct AnnounceRequest {
     pub uploaded: u64,
     pub downloaded: u64,
     pub left: u64,
-    pub event: Option<Event>,
+    #[serde(default)]
+    pub event: Event,
     pub compact: Option<u8>,
 }
 
