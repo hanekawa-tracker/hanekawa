@@ -1,5 +1,9 @@
+mod response;
+
 use super::http::encode::Bencode;
 use super::http::extractor::Query;
+
+use response::Failure;
 
 use hanekawa::http_tracker::proto::{
     AnnounceRequest, AnnounceResponse, ScrapeRequest, ScrapeResponse,
@@ -15,10 +19,11 @@ async fn announce(
     Query(announce): Query<AnnounceRequest>,
     State(tracker): State<HttpTrackerService>,
     ConnectInfo(info): ConnectInfo<std::net::SocketAddr>,
-) -> Bencode<AnnounceResponse> {
+) -> Result<Bencode<AnnounceResponse>, Failure> {
     // TODO: extract true source IP from potential proxies.
-    let response = tracker.announce(announce, info.ip()).await;
-    Bencode(response)
+    let response = tracker.announce(announce, info.ip()).await?;
+
+    Ok(Bencode(response))
 }
 
 // BEP 48: Tracker Protocol Extension: Scrape

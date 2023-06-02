@@ -1,4 +1,6 @@
-use super::proto::{AnnounceRequest, AnnounceResponse, PeerData, ScrapeRequest, ScrapeResponse};
+use super::proto::{
+    AnnounceRequest, AnnounceResponse, Error, PeerData, ScrapeRequest, ScrapeResponse,
+};
 
 use hanekawa_common::{
     repository::{
@@ -32,7 +34,11 @@ impl HttpTrackerService {
         }
     }
 
-    pub async fn announce(&self, announce: AnnounceRequest, sender_ip: IpAddr) -> AnnounceResponse {
+    pub async fn announce(
+        &self,
+        announce: AnnounceRequest,
+        sender_ip: IpAddr,
+    ) -> Result<AnnounceResponse, Error> {
         let info_hash_summary = self
             .info_hash_repository
             .get_info_hash_summary(GetInfoHashSummary {
@@ -46,8 +52,7 @@ impl HttpTrackerService {
                 && info_hash_summary.status != InfoHashStatus::ExplicitAllow)
         {
             let st = info_hash_summary.info_hash.to_hex();
-            dbg!(st);
-            unimplemented!("denied info_hash");
+            return Err(Error::Other(format!("info hash not allowed: {st}")));
         }
 
         let cmd = UpdatePeerAnnounce {
@@ -84,11 +89,11 @@ impl HttpTrackerService {
         let is_compact = announce.compact.unwrap_or(1) == 1;
         let (peers, peers6) = encode_peers(peers, is_compact);
 
-        AnnounceResponse {
+        Ok(AnnounceResponse {
             interval: self.config.peer_announce_interval,
             peers,
             peers6,
-        }
+        })
     }
 
     pub async fn scrape(&self, request: ScrapeRequest) -> ScrapeResponse {
