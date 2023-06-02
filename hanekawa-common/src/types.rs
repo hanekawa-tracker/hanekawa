@@ -53,7 +53,7 @@ pub struct Peer {
     pub port: u16,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct PeerStatistics {
     pub complete: u32,
     pub downloaded: u32,

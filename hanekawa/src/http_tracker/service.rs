@@ -89,16 +89,32 @@ impl HttpTrackerService {
         let is_compact = announce.compact.unwrap_or(1) == 1;
         let (peers, peers6) = encode_peers(peers, is_compact);
 
+        let stats = self
+            .peer_repository
+            .get_peer_statistics(GetPeerStatistics {
+                info_hashes: &[announce.info_hash.clone()],
+                active_after,
+            })
+            .await
+            .unwrap()
+            .get(&announce.info_hash)
+            .cloned();
+
         Ok(AnnounceResponse {
             interval: self.config.peer_announce_interval,
             peers,
             peers6,
+            stats,
         })
     }
 
     pub async fn scrape(&self, request: ScrapeRequest) -> Result<ScrapeResponse, Error> {
+        let active_after = time::OffsetDateTime::now_utc()
+            - std::time::Duration::from_secs(self.config.peer_activity_timeout as u64);
+
         let cmd = GetPeerStatistics {
             info_hashes: &request.info_hash,
+            active_after,
         };
 
         let files = self.peer_repository.get_peer_statistics(cmd).await.unwrap();

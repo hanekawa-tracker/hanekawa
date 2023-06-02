@@ -28,6 +28,7 @@ pub struct GetPeers<'a> {
 #[derive(Debug, Clone)]
 pub struct GetPeerStatistics<'a> {
     pub info_hashes: &'a [InfoHash],
+    pub active_after: OffsetDateTime,
 }
 
 #[async_trait::async_trait]

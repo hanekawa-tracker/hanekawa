@@ -101,14 +101,15 @@ WHERE
             "
 SELECT
   info_hash,
-  COUNT(*) FILTER (WHERE remaining = 0) AS complete,
-  COUNT(*) FILTER (WHERE remaining <> 0) AS incomplete
+  COUNT(*) FILTER (WHERE remaining =  0 AND last_update_ts > $2) AS complete,
+  COUNT(*) FILTER (WHERE remaining <> 0 AND last_update_ts > $2) AS incomplete
 FROM
   peer_announces
 WHERE info_hash = ANY($1)
 GROUP BY info_hash
 ",
-            &ih_bs
+            &ih_bs,
+            &cmd.active_after
         )
         .map(|r| {
             (

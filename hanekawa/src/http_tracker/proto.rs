@@ -44,6 +44,9 @@ pub struct AnnounceResponse {
     pub interval: u32,
     pub peers: PeerData,
     pub peers6: PeerData,
+    #[serde(flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stats: Option<PeerStatistics>,
 }
 
 #[derive(Debug, serde::Deserialize)]
