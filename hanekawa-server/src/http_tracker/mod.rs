@@ -1,5 +1,7 @@
 mod response;
 
+use self::response::OrFailure;
+
 use super::http::encode::Bencode;
 use super::http::extractor::Query;
 
@@ -16,7 +18,7 @@ use axum::Router;
 use hanekawa_common::Config;
 
 async fn announce(
-    Query(announce): Query<AnnounceRequest>,
+    OrFailure(Query(announce)): OrFailure<Query<AnnounceRequest>>,
     State(tracker): State<HttpTrackerService>,
     ConnectInfo(info): ConnectInfo<std::net::SocketAddr>,
 ) -> Result<Bencode<AnnounceResponse>, Failure> {
@@ -28,11 +30,11 @@ async fn announce(
 
 // BEP 48: Tracker Protocol Extension: Scrape
 async fn scrape(
-    Query(scrape): Query<ScrapeRequest>,
+    OrFailure(Query(scrape)): OrFailure<Query<ScrapeRequest>>,
     State(tracker): State<HttpTrackerService>,
-) -> Bencode<ScrapeResponse> {
-    let response = tracker.scrape(scrape).await;
-    Bencode(response)
+) -> Result<Bencode<ScrapeResponse>, Failure> {
+    let response = tracker.scrape(scrape).await?;
+    Ok(Bencode(response))
 }
 
 pub async fn tracker<S>(cfg: &Config) -> Router<S> {

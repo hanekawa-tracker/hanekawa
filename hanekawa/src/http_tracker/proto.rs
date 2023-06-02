@@ -4,13 +4,17 @@ use std::{collections::HashMap, fmt::Display};
 
 #[derive(Debug)]
 pub enum Error {
+    ServerError(String),
+    InfoHashNotAllowed(String),
     Other(String),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Other(s) => f.write_str(&s),
+            Self::ServerError(s) => f.write_fmt(format_args!("server error: {s}")),
+            Self::InfoHashNotAllowed(s) => f.write_fmt(format_args!("info hash not allowed: {s}")),
+            Self::Other(s) => f.write_fmt(format_args!("error: {s}")),
         }
     }
 }

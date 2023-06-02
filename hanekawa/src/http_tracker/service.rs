@@ -52,7 +52,7 @@ impl HttpTrackerService {
                 && info_hash_summary.status != InfoHashStatus::ExplicitAllow)
         {
             let st = info_hash_summary.info_hash.to_hex();
-            return Err(Error::Other(format!("info hash not allowed: {st}")));
+            return Err(Error::InfoHashNotAllowed(st));
         }
 
         let cmd = UpdatePeerAnnounce {
@@ -96,14 +96,14 @@ impl HttpTrackerService {
         })
     }
 
-    pub async fn scrape(&self, request: ScrapeRequest) -> ScrapeResponse {
+    pub async fn scrape(&self, request: ScrapeRequest) -> Result<ScrapeResponse, Error> {
         let cmd = GetPeerStatistics {
             info_hashes: &request.info_hash,
         };
 
         let files = self.peer_repository.get_peer_statistics(cmd).await.unwrap();
 
-        ScrapeResponse { files }
+        Ok(ScrapeResponse { files })
     }
 }
 
