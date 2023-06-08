@@ -17,8 +17,8 @@ hanekawa-storage = { path = "../hanekawa-storage" }
 axum = "0"
 async-trait = "0"
 bytes = "1"
-config = { version = "0", default-features = false, features = ["toml"] }
 dotenvy = "0"
+figment = { version = "0.10", features = ["toml", "env"] }
 futures = "0.3"
 serde = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
