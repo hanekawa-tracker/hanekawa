@@ -8,8 +8,9 @@ use hanekawa_common::Config;
 use http_tracker::tracker;
 
 use axum::Router;
+use tokio_util::sync::CancellationToken;
 
-async fn start_http(cfg: Config) {
+async fn start_http(cfg: Config, kt: CancellationToken) {
     let tracker = tracker(&cfg).await;
     let admin = admin::admin(&cfg).await;
 
@@ -17,12 +18,13 @@ async fn start_http(cfg: Config) {
 
     axum::Server::bind(&(cfg.bind_ip, cfg.http_bind_port).into())
         .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .with_graceful_shutdown(async { kt.cancelled().await })
         .await
         .unwrap();
 }
 
-async fn start_udp(cfg: Config) {
-    udp_tracker::start(&cfg).await;
+async fn start_udp(cfg: Config, kt: CancellationToken) {
+    udp_tracker::start(&cfg, kt).await;
 }
 
 pub async fn start() {
@@ -31,8 +33,31 @@ pub async fn start() {
 
     let cfg = crate::config::load_config();
 
-    let hh = tokio::spawn(start_http(cfg.clone()));
-    let uh = tokio::spawn(start_udp(cfg.clone()));
+    tracing::event!(tracing::Level::DEBUG, "yay");
 
-    let _ = tokio::join!(hh, uh);
+    let kt = tokio_util::sync::CancellationToken::new();
+
+    let hh = tokio::spawn(start_http(cfg.clone(), kt.child_token()));
+    let uh = tokio::spawn(start_udp(cfg.clone(), kt.child_token()));
+
+    let cancel = tokio::spawn(async move {
+        use tokio::signal::{
+            ctrl_c,
+            unix::{signal, SignalKind},
+        };
+
+        let mut int = signal(SignalKind::interrupt()).unwrap();
+        let mut term = signal(SignalKind::terminate()).unwrap();
+
+        tokio::select! {
+            _ = int.recv() => {},
+            _ = term.recv() => {},
+            _ = ctrl_c() => {}
+        }
+
+        tracing::info!("Shutting down...");
+        kt.cancel();
+    });
+
+    let _ = tokio::join!(cancel, hh, uh);
 }
