@@ -1,0 +1,29 @@
+services:
+  app:
+    depends_on:
+      - 'db'
+    build: .
+    ports:
+      - 8001:8001
+      
+    environment:
+      HKW_DATABASE_URL: 'postgres://postgres:2ba3-nyannyan@db/postgres'
+      HKW_BIND_IP: 0.0.0.0
+      HKW_HTTP_BIND_PORT: 8001
+      HKW_UDP_BIND_PORT: 8002
+      HKW_PEER_ANNOUNCE_INTERVAL: 60
+      HKW_PEER_ACTIVITY_TIMEOUT: 120
+      HKW_ONLY_ALLOWED_INFO_HASHES: false
+      HKW_ENABLE_ADMIN_API: false
+    env_file:
+      - '.env'
+  db:
+    image: postgres:15-alpine
+    environment:
+      'POSTGRES_PASSWORD': '2ba3-nyannyan'
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+
+volumes:
+  pg-data:
+    
