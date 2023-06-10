@@ -10,4 +10,5 @@ license.workspace = true
 [dependencies]
 hanekawa-common = { path = "../hanekawa-common" }
 async-trait = "0"
+log = "0"
 sqlx = { version = "0.6", features = ["runtime-tokio-native-tls", "postgres", "uuid", "time", "ipnetwork", "offline"] }
