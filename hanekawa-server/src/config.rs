@@ -1,7 +1,7 @@
 use hanekawa_common::Config;
 
 use figment::{
-    providers::{Env, Format, Toml},
+    providers::{Env, Format, Serialized, Toml},
     Figment,
 };
 
@@ -10,6 +10,7 @@ pub fn load_config() -> Config {
     const ENV_PREFIX: &'static str = "HKW_";
 
     let cfg = Figment::new()
+        .merge(Serialized::defaults(Config::default_config()))
         .merge(Toml::file(CONFIG_FILE))
         .merge(Env::prefixed(ENV_PREFIX))
         .extract();
