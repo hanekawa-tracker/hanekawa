@@ -7,6 +7,7 @@ use std::{net::Ipv4Addr, sync::Arc};
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
     pub database_url: String,
+    pub message_queue_url: String,
     pub bind_ip: Ipv4Addr,
     pub http_bind_port: u16,
     pub udp_bind_port: u16,
@@ -47,5 +48,5 @@ impl Config {
 pub struct Services {
     pub peer_repository: Arc<dyn crate::repository::peer::PeerRepository>,
     pub info_hash_repository: Arc<dyn crate::repository::info_hash::InfoHashRepository>,
-    // task_queue: Arc<dyn crate::task::TaskQueue>
+    pub task_queue: Arc<dyn crate::task::TaskQueue>,
 }

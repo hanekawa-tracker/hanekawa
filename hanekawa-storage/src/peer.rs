@@ -20,7 +20,7 @@ pub struct PeerRepository {
 
 #[async_trait::async_trait]
 impl Repository for PeerRepository {
-    async fn update_peer_announce(&self, cmd: UpdatePeerAnnounce<'_>) -> Result<(), Error> {
+    async fn update_peer_announce(&self, cmd: &UpdatePeerAnnounce) -> Result<(), Error> {
         let inet: IpNetwork = cmd.ip.clone().into();
 
         sqlx::query!(

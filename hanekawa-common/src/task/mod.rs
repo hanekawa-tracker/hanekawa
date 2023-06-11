@@ -1,13 +1,15 @@
-#[typetag::serde]
-#[async_trait::async_trait]
-pub trait Task {
-    fn queue_name(&self) -> &'static str;
+use std::pin::Pin;
 
+use futures::Stream;
+
+#[typetag::serde(tag = "type")]
+#[async_trait::async_trait]
+pub trait Task: Send + Sync {
     async fn execute(&self, ctx: &crate::Services) -> Option<()>;
 }
 
 #[async_trait::async_trait]
-pub trait TaskQueue {
+pub trait TaskQueue: Send + Sync {
     async fn enqueue(&self, task: &dyn Task) -> Option<()>;
-    async fn dequeue(&self) -> Box<dyn Task>;
+    async fn consume(&self) -> Pin<Box<dyn Stream<Item = Box<dyn Task>> + Send>>;
 }

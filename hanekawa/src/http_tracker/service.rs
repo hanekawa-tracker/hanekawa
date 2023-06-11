@@ -7,30 +7,42 @@ use hanekawa_common::{
         info_hash::{GetInfoHashSummary, InfoHashRepository},
         peer::{GetPeerStatistics, GetPeers, PeerRepository, UpdatePeerAnnounce},
     },
+    task::Task,
     types::{InfoHashStatus, Peer},
-    Config,
+    Config, Services,
 };
 
 use std::net::IpAddr;
-use std::sync::Arc;
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct UpdatePeerAnnounceTask {
+    cmd: UpdatePeerAnnounce,
+}
+
+#[typetag::serde]
+#[async_trait::async_trait]
+impl Task for UpdatePeerAnnounceTask {
+    async fn execute(&self, ctx: &Services) -> Option<()> {
+        ctx.peer_repository
+            .update_peer_announce(&self.cmd)
+            .await
+            .unwrap();
+
+        Some(())
+    }
+}
 
 #[derive(Clone)]
 pub struct HttpTrackerService {
     config: Config,
-    peer_repository: Arc<dyn PeerRepository>,
-    info_hash_repository: Arc<dyn InfoHashRepository>,
+    services: Services,
 }
 
 impl HttpTrackerService {
-    pub fn new(
-        config: &Config,
-        peer_repository: Arc<dyn PeerRepository>,
-        info_hash_repository: Arc<dyn InfoHashRepository>,
-    ) -> Self {
+    pub fn new(config: &Config, services: Services) -> Self {
         Self {
             config: config.clone(),
-            peer_repository,
-            info_hash_repository,
+            services,
         }
     }
 
@@ -40,6 +52,7 @@ impl HttpTrackerService {
         sender_ip: IpAddr,
     ) -> Result<AnnounceResponse, Error> {
         let info_hash_summary = self
+            .services
             .info_hash_repository
             .get_info_hash_summary(GetInfoHashSummary {
                 info_hash: &announce.info_hash,
@@ -56,8 +69,8 @@ impl HttpTrackerService {
         }
 
         let cmd = UpdatePeerAnnounce {
-            info_hash: &announce.info_hash,
-            peer_id: &announce.peer_id,
+            info_hash: announce.info_hash.clone(),
+            peer_id: announce.peer_id.clone(),
             ip: sender_ip,
             port: announce.port,
             uploaded: announce.uploaded,
@@ -67,15 +80,16 @@ impl HttpTrackerService {
             update_timestamp: time::OffsetDateTime::now_utc(),
         };
 
-        self.peer_repository
-            .update_peer_announce(cmd)
-            .await
-            .unwrap();
+        self.services
+            .task_queue
+            .enqueue(&UpdatePeerAnnounceTask { cmd })
+            .await;
 
         let active_after = time::OffsetDateTime::now_utc()
             - std::time::Duration::from_secs(self.config.peer_activity_timeout as u64);
 
         let peers = self
+            .services
             .peer_repository
             .get_peers(GetPeers {
                 info_hash: &announce.info_hash,
@@ -90,6 +104,7 @@ impl HttpTrackerService {
         let (peers, peers6) = encode_peers(peers, is_compact);
 
         let stats = self
+            .services
             .peer_repository
             .get_peer_statistics(GetPeerStatistics {
                 info_hashes: &[announce.info_hash.clone()],
@@ -117,7 +132,12 @@ impl HttpTrackerService {
             active_after,
         };
 
-        let files = self.peer_repository.get_peer_statistics(cmd).await.unwrap();
+        let files = self
+            .services
+            .peer_repository
+            .get_peer_statistics(cmd)
+            .await
+            .unwrap();
 
         Ok(ScrapeResponse { files })
     }

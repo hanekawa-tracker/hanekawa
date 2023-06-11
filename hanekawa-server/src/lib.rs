@@ -2,6 +2,7 @@ mod admin;
 mod config;
 mod http;
 mod http_tracker;
+mod task_queue;
 mod udp_tracker;
 
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use hanekawa_common::{Config, Services};
 use http_tracker::tracker;
 
 use axum::Router;
+use futures::StreamExt;
 use tokio_util::sync::CancellationToken;
 
 async fn start_http(cfg: Config, services: Services, kt: CancellationToken) {
@@ -35,19 +37,34 @@ pub async fn start() {
 
     let cfg = crate::config::load_config();
 
-    tracing::event!(tracing::Level::DEBUG, "yay");
-
     let kt = tokio_util::sync::CancellationToken::new();
 
     let storage = hanekawa_storage::Services::start(&cfg).await;
+    let queue = task_queue::AmqpTaskQueue::start(&cfg).await;
 
     let services = hanekawa_common::Services {
         peer_repository: Arc::new(storage.peer),
         info_hash_repository: Arc::new(storage.info_hash),
+        task_queue: Arc::new(queue),
     };
 
     let hh = tokio::spawn(start_http(cfg.clone(), services.clone(), kt.child_token()));
     let uh = tokio::spawn(start_udp(cfg.clone(), services.clone(), kt.child_token()));
+
+    let tkt = kt.child_token();
+    let tasks = tokio::spawn(async move {
+        let mut stream = services.task_queue.consume().await;
+
+        loop {
+            tokio::select! {
+                _ = tkt.cancelled() => break,
+                Some(task) = stream.next() => {
+                    tracing::info!("executing a task..");
+                    task.execute(&services).await;
+                }
+            }
+        }
+    });
 
     let cancel = tokio::spawn(async move {
         use tokio::signal::{
@@ -68,5 +85,5 @@ pub async fn start() {
         kt.cancel();
     });
 
-    let _ = tokio::join!(cancel, hh, uh);
+    let _ = tokio::join!(cancel, hh, uh, tasks);
 }

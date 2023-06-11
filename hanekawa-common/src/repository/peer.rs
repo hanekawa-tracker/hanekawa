@@ -6,10 +6,10 @@ use time::OffsetDateTime;
 
 use super::Error;
 
-#[derive(Debug, Clone)]
-pub struct UpdatePeerAnnounce<'a> {
-    pub info_hash: &'a InfoHash,
-    pub peer_id: &'a PeerId,
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct UpdatePeerAnnounce {
+    pub info_hash: InfoHash,
+    pub peer_id: PeerId,
     pub ip: IpAddr,
     pub port: u16,
     pub uploaded: u64,
@@ -33,7 +33,7 @@ pub struct GetPeerStatistics<'a> {
 
 #[async_trait::async_trait]
 pub trait PeerRepository: Send + Sync {
-    async fn update_peer_announce(&self, cmd: UpdatePeerAnnounce<'_>) -> Result<(), Error>;
+    async fn update_peer_announce(&self, cmd: &UpdatePeerAnnounce) -> Result<(), Error>;
     async fn get_peers(&self, cmd: GetPeers<'_>) -> Result<Vec<Peer>, Error>;
     async fn get_peer_statistics(
         &self,
