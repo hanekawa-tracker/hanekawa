@@ -1,13 +1,17 @@
 services:
   app:
     depends_on:
-      - 'db'
+      db:
+        condition: service_started
+      mq:
+        condition: service_healthy
     build: .
     ports:
       - 8001:8001
       
     environment:
       HKW_DATABASE_URL: 'postgres://postgres:2ba3-nyannyan@db/postgres'
+      HKW_MESSAGE_QUEUE_URL: 'amqp://hkw-mq:5672'
       HKW_BIND_IP: 0.0.0.0
       HKW_HTTP_BIND_PORT: 8001
       HKW_UDP_BIND_PORT: 8002
@@ -24,6 +28,20 @@ services:
     volumes:
       - pg-data:/var/lib/postgresql/data
 
+  mq:
+    image: rabbitmq:3-alpine
+    hostname: hkw-mq
+    volumes:
+      - mq-data:/var/lib/rabbitmq
+    ports:
+      - '5672:5672'
+    healthcheck:
+      test: 'rabbitmq-diagnostics -q ping'
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pg-data:
+  mq-data:
     
