@@ -19,12 +19,12 @@ impl AmqpMessage {
         self.content.as_ref()
     }
 
-    pub async fn ack(self) {
-        self.delivery.acker.ack(Default::default()).await.unwrap();
-    }
-
-    pub async fn nack(&self) {
-        self.delivery.acker.nack(Default::default()).await.unwrap();
+    pub async fn ack(self, success: bool) {
+        if success {
+            self.delivery.acker.ack(Default::default()).await.unwrap();
+        } else {
+            self.delivery.acker.nack(Default::default()).await.unwrap();
+        }
     }
 }
 
@@ -116,11 +116,7 @@ impl BackgroundTaskService {
                     let result = task.execute(&self.services)
                     .await;
 
-                    if result.is_some() {
-                        message.ack().await;
-                    } else {
-                        message.nack().await;
-                    }
+                    message.ack(result.is_some()).await;
                 }
             }
         }
