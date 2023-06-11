@@ -38,8 +38,8 @@ async fn scrape(
 }
 
 pub async fn tracker<S>(cfg: &Config, services: Services) -> Router<S> {
-
-    let tracker = HttpTrackerService::new(cfg, services.peer_repository, services.info_hash_repository);
+    let tracker =
+        HttpTrackerService::new(cfg, services.peer_repository, services.info_hash_repository);
 
     Router::new()
         .route("/announce", get(announce))

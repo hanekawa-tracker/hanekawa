@@ -4,14 +4,16 @@ mod http;
 mod http_tracker;
 mod udp_tracker;
 
-use hanekawa_common::Config;
+use std::sync::Arc;
+
+use hanekawa_common::{Config, Services};
 use http_tracker::tracker;
 
 use axum::Router;
 use tokio_util::sync::CancellationToken;
 
-async fn start_http(cfg: Config, kt: CancellationToken) {
-    let tracker = tracker(&cfg).await;
+async fn start_http(cfg: Config, services: Services, kt: CancellationToken) {
+    let tracker = tracker(&cfg, services).await;
     let admin = admin::admin(&cfg).await;
 
     let app = Router::new().nest("/", tracker).nest("/admin", admin);
@@ -23,7 +25,7 @@ async fn start_http(cfg: Config, kt: CancellationToken) {
         .unwrap();
 }
 
-async fn start_udp(cfg: Config, kt: CancellationToken) {
+async fn start_udp(cfg: Config, _services: Services, kt: CancellationToken) {
     udp_tracker::start(&cfg, kt).await;
 }
 
@@ -37,8 +39,15 @@ pub async fn start() {
 
     let kt = tokio_util::sync::CancellationToken::new();
 
-    let hh = tokio::spawn(start_http(cfg.clone(), kt.child_token()));
-    let uh = tokio::spawn(start_udp(cfg.clone(), kt.child_token()));
+    let storage = hanekawa_storage::Services::start(&cfg).await;
+
+    let services = hanekawa_common::Services {
+        peer_repository: Arc::new(storage.peer),
+        info_hash_repository: Arc::new(storage.info_hash),
+    };
+
+    let hh = tokio::spawn(start_http(cfg.clone(), services.clone(), kt.child_token()));
+    let uh = tokio::spawn(start_udp(cfg.clone(), services.clone(), kt.child_token()));
 
     let cancel = tokio::spawn(async move {
         use tokio::signal::{

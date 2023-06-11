@@ -1,7 +1,8 @@
 pub mod repository;
+pub mod task;
 pub mod types;
 
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, sync::Arc};
 
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
@@ -40,4 +41,11 @@ impl Config {
 
         defaults
     }
+}
+
+#[derive(Clone)]
+pub struct Services {
+    pub peer_repository: Arc<dyn crate::repository::peer::PeerRepository>,
+    pub info_hash_repository: Arc<dyn crate::repository::info_hash::InfoHashRepository>,
+    // task_queue: Arc<dyn crate::task::TaskQueue>
 }
