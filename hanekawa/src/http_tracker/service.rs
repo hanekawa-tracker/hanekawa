@@ -4,8 +4,8 @@ use super::proto::{
 
 use hanekawa_common::{
     repository::{
-        info_hash::{GetInfoHashSummary, InfoHashRepository},
-        peer::{GetPeerStatistics, GetPeers, PeerRepository, UpdatePeerAnnounce},
+        info_hash::GetInfoHashSummary,
+        peer::{GetPeerStatistics, GetPeers, UpdatePeerAnnounce},
     },
     task::Task,
     types::{InfoHashStatus, Peer},

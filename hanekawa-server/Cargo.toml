@@ -14,13 +14,13 @@ hanekawa-common = { path = "../hanekawa-common" }
 hanekawa-percent-encode = { path = "../hanekawa-percent-encode" }
 hanekawa-udp = { path = "../hanekawa-udp" }
 hanekawa-storage = { path = "../hanekawa-storage" }
+hanekawa-queue = { path = "../hanekawa-queue" }
 axum = "0"
 async-trait = "0"
 bytes = "1"
 dotenvy = "0"
 figment = { version = "0.10", features = ["toml", "env"] }
 futures = "0.3"
-lapin = "2"
 serde = "1"
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
