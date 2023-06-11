@@ -15,7 +15,7 @@ use hanekawa::http_tracker::HttpTrackerService;
 use axum::extract::{ConnectInfo, State};
 use axum::routing::get;
 use axum::Router;
-use hanekawa_common::Config;
+use hanekawa_common::{Config, Services};
 
 async fn announce(
     OrFailure(Query(announce)): OrFailure<Query<AnnounceRequest>>,
@@ -37,12 +37,9 @@ async fn scrape(
     Ok(Bencode(response))
 }
 
-pub async fn tracker<S>(cfg: &Config) -> Router<S> {
-    let storage = hanekawa_storage::Services::start(cfg).await;
+pub async fn tracker<S>(cfg: &Config, services: Services) -> Router<S> {
 
-    let pr = std::sync::Arc::new(storage.peer);
-    let ir = std::sync::Arc::new(storage.info_hash);
-    let tracker = HttpTrackerService::new(cfg, pr, ir);
+    let tracker = HttpTrackerService::new(cfg, services.peer_repository, services.info_hash_repository);
 
     Router::new()
         .route("/announce", get(announce))
